@@ -248,7 +248,7 @@ async def preview_scene_prompt(
         draft = _stored_prompt_draft(scene)
         if draft and not force_rewrite:
             meta = _scene_video_settings(scene).get("prompt_draft_meta") or {}
-            if meta.get("based_on") == based_on:
+            if meta.get("based_on") == based_on and meta.get("workflow_id") == workflow.get("id"):
                 return {
                     "prompt": draft,
                     "profile": profile,

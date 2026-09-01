@@ -59,7 +59,7 @@ export interface SceneVideoSettings {
 	clip_source?: string;
 	form_workflow_id?: number;
 	prompt_draft?: string;
-	prompt_draft_meta?: { based_on?: string; saved_at?: string };
+	prompt_draft_meta?: { based_on?: string; workflow_id?: number; saved_at?: string };
 	[key: string]: unknown;
 }
 

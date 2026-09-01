@@ -167,7 +167,7 @@
 	const selected = $derived(scenes.find((s) => s.id === selectedId) ?? null);
 
 	$effect(() => {
-		const id = selected?.id ?? null;
+			const id = selected?.id ?? null;
 		if (id === lastFormScene) return;
 		if (lastFormScene != null) formCache.set(lastFormScene, formValues);
 		lastFormScene = id;

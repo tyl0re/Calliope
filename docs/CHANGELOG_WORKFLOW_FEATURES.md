@@ -28,6 +28,8 @@ Assets now link forward to Script, and Script links forward to Video. Regenerati
 
 The Video stage keeps the prompt and input payload for each render job. After a clip has been rendered, contributors can open **View prompt & inputs**, select a job from the scene history, choose **Edit prompt**, and regenerate with a revised prompt. Saving the revised prompt updates the scene draft so future generations reuse it. The separate **Regenerate** action forces a fresh LLM rewrite instead of returning the existing draft.
 
+Prompt drafts also record the workflow they were generated for. Changing from a one-reference workflow to a multi-reference workflow therefore invalidates the old draft and rebuilds the prompt with every wired subject. The Video stage selects a reference workflow with enough image slots for the scene's available character and location assets when no explicit workflow choice exists.
+
 ## Video Workflow Defaults
 
 Video selection no longer falls back to the newest workflow by list order. It uses the lowest enabled workflow ID when a scene has no stored selection, preventing specialized image-to-video or continuation workflows from becoming accidental defaults. Missing optional `SolAttnPatch` nodes were removed from affected workflows because the indexed package is AMD ROCm/Linux-specific and is not suitable as a Windows/NVIDIA dependency.
