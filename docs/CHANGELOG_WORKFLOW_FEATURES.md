@@ -34,6 +34,8 @@ Prompt drafts also record the workflow they were generated for. Changing from a 
 
 Video selection no longer falls back to the newest workflow by list order. It uses the lowest enabled workflow ID when a scene has no stored selection, preventing specialized image-to-video or continuation workflows from becoming accidental defaults. Missing optional `SolAttnPatch` nodes were removed from affected workflows because the indexed package is AMD ROCm/Linux-specific and is not suitable as a Windows/NVIDIA dependency.
 
+Video activity events use the stable scene order as a clip label, for example `Clip #4 · INT. APARTMENT - NIGHT`. The label is included in queue creation, start, wait, completion, failure, and H3 rewrite events so the Activity panel and Agent Log can be matched to the timeline.
+
 ## Security And Portability
 
 API credentials are kept in ignored local configuration and are exposed through public settings only as boolean presence flags. The ComfyUI API key is passed to API nodes through `extra_data`, never logged or returned. No model weights, generated media, SQLite databases, absolute machine paths, or user-specific configuration are part of this change set.

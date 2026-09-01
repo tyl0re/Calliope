@@ -25,6 +25,10 @@ from calliope.queue.manager import queue_manager
 logger = logging.getLogger("calliope.video_agent")
 
 
+def _clip_label(scene: dict[str, Any]) -> str:
+    return f"Clip #{scene.get('order_index')} · {scene.get('heading') or 'Untitled'}"
+
+
 def _h3_subjects(
     characters: list[dict[str, Any]],
     location: dict[str, Any] | None,
@@ -259,7 +263,7 @@ async def preview_scene_prompt(
         await event_bus.publish(
             "agent.thinking",
             {
-                "message": f"H3 prompt rewrite · scene {scene.get('order_index')}",
+                "message": f"{_clip_label(scene)} · H3 prompt rewrite",
                 "project_id": project_id,
             },
         )
@@ -401,7 +405,7 @@ async def enqueue_video_jobs(
                     await event_bus.publish(
                         "agent.thinking",
                         {
-                            "message": f"H3 prompt rewrite · scene {scene.get('order_index')}",
+                            "message": f"{_clip_label(scene)} · H3 prompt rewrite",
                             "project_id": project_id,
                         },
                     )
@@ -488,7 +492,7 @@ async def enqueue_video_jobs(
                 {
                     "job_id": job["id"],
                     "kind": "video",
-                    "message": f"Scene · {scene.get('heading') or scene.get('order_index')}",
+                    "message": f"{_clip_label(scene)} · queued",
                     "project_id": project_id,
                 },
             )
