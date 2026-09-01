@@ -104,6 +104,21 @@ def test_input_duration_alias():
     assert values["5"] == 7
 
 
+def test_negative_prompt_is_optional():
+    workflow = {
+        "2": {
+            "inputs": {"value": ""},
+            "class_type": "PrimitiveStringMultiline",
+            "_meta": {"title": "Negative Prompt (Input:negative)"},
+        },
+    }
+
+    inputs = parse_dynamic_inputs(workflow)
+
+    assert inputs[0]["role"] == "negative"
+    assert inputs[0]["required"] is False
+
+
 def test_video_and_audio_roles():
     workflow = {
         "10": {

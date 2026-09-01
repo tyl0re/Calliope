@@ -7,6 +7,7 @@
 		jobsApi,
 		playgroundApi,
 		projects,
+		settings,
 		workflows,
 		type Character,
 		type Item,
@@ -26,7 +27,8 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import {
 		compactInputValues,
-		withoutPromptInputs,
+		isNegativePromptInput,
+		withoutPromptAndNegativeInputs,
 		workflowHasPromptInput,
 	} from '$lib/comfy/promptInput';
 	import {
@@ -44,10 +46,14 @@
 	const client = useQueryClient();
 	let tab = $state<'characters' | 'locations' | 'items'>('characters');
 	let drafts = $state<Record<string, string>>({});
+	let negativeDrafts = $state<Record<string, string>>({});
+	let randomSeedDrafts = $state<Record<string, boolean>>({});
 	let savingKey = $state<string | null>(null);
 	let sheetWorkflowId = $state<number | ''>('');
 	let envWorkflowId = $state<number | ''>('');
 	let itemWorkflowId = $state<number | ''>('');
+	let workflowPreferencesLoadedFor = $state<number | null>(null);
+	let appliedKrea2Mode = $state<'local' | 'api' | null>(null);
 	let sheetInputValues = $state<Record<string, string | number>>({});
 	let envInputValues = $state<Record<string, string | number>>({});
 	let itemInputValues = $state<Record<string, string | number>>({});
@@ -87,6 +93,11 @@
 	const workflowsQuery = createQuery({
 		queryKey: ['workflows'],
 		queryFn: workflows.list,
+	});
+
+	const settingsQuery = createQuery({
+		queryKey: ['settings'],
+		queryFn: settings.get,
 	});
 
 	// Shared cache key with QueueStage — SSE events from the parent also invalidate it.
@@ -134,6 +145,10 @@
 	const imageWorkflows = $derived(
 		(($workflowsQuery.data ?? []) as Workflow[]).filter((w) => w.is_enabled && w.kind === 'image'),
 	);
+	const krea2Mode = $derived($settingsQuery.data?.krea2_mode ?? 'local');
+	const modeWorkflows = $derived(
+		imageWorkflows.filter((workflow) => workflowMatchesKreaMode(workflow, krea2Mode)),
+	);
 
 	const sheetWorkflow = $derived(
 		imageWorkflows.find((w) => w.id === sheetWorkflowId) ?? null,
@@ -144,6 +159,15 @@
 	const sheetHasPrompt = $derived(workflowHasPromptInput(sheetWorkflow?.input_schema));
 	const envHasPrompt = $derived(workflowHasPromptInput(envWorkflow?.input_schema));
 	const itemHasPrompt = $derived(workflowHasPromptInput(itemWorkflow?.input_schema));
+	const sheetHasNegative = $derived(
+		!!sheetWorkflow?.input_schema.some(isNegativePromptInput),
+	);
+	const envHasNegative = $derived(
+		!!envWorkflow?.input_schema.some(isNegativePromptInput),
+	);
+	const itemHasNegative = $derived(
+		!!itemWorkflow?.input_schema.some(isNegativePromptInput),
+	);
 	const showCharPrompt = $derived(sheetHasPrompt);
 
 	const jobs = $derived($jobsQuery.data ?? []);
@@ -180,27 +204,115 @@
 		const list = imageWorkflows;
 		if (list.length === 0) return;
 		const first = list[0].id;
-		if (sheetWorkflowId === '') sheetWorkflowId = first;
-		if (envWorkflowId === '') envWorkflowId = first;
-		if (itemWorkflowId === '') itemWorkflowId = first;
+		const mode = krea2Mode;
+		if (workflowPreferencesLoadedFor !== projectId || appliedKrea2Mode !== mode) {
+			const saved = readWorkflowPreferences();
+			const modeWorkflows = list.filter((workflow) => workflowMatchesKreaMode(workflow, mode));
+			if (modeWorkflows.length === 0) {
+				sheetWorkflowId = '';
+				envWorkflowId = '';
+				itemWorkflowId = '';
+				workflowPreferencesLoadedFor = projectId;
+				appliedKrea2Mode = mode;
+				return;
+			}
+			const modeFirst = modeWorkflows[0].id;
+			sheetWorkflowId = validWorkflowIdForMode(saved.sheet, list, mode) || modeFirst;
+			envWorkflowId = validWorkflowIdForMode(saved.environment, list, mode) || modeFirst;
+			itemWorkflowId = validWorkflowIdForMode(saved.item, list, mode) || modeFirst;
+			workflowPreferencesLoadedFor = projectId;
+			appliedKrea2Mode = mode;
+			return;
+		}
+		if (sheetWorkflowId === '') sheetWorkflowId = modeWorkflows[0]?.id || first;
+		if (envWorkflowId === '') envWorkflowId = modeWorkflows[0]?.id || first;
+		if (itemWorkflowId === '') itemWorkflowId = modeWorkflows[0]?.id || first;
 	});
+
+	function workflowStorageKey(): string {
+		return `calliope:asset-workflows:${projectId}`;
+	}
+
+	function readWorkflowPreferences(): Record<string, unknown> {
+		if (typeof window === 'undefined') return {};
+		try {
+			const raw = window.localStorage.getItem(workflowStorageKey());
+			return raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+		} catch {
+			return {};
+		}
+	}
+
+	function validWorkflowId(value: unknown, list: Workflow[]): number | '' {
+		const id = typeof value === 'number' ? value : Number(value);
+		return Number.isInteger(id) && list.some((workflow) => workflow.id === id) ? id : '';
+	}
+
+	function workflowMatchesKreaMode(workflow: Workflow, mode: 'local' | 'api'): boolean {
+		const name = workflow.name.toLowerCase().replace(/[_-]+/g, ' ');
+		return mode === 'local' ? name.includes('local fp8') : /(?:^|\s)api(?:\s|$)/.test(name);
+	}
+
+	function validWorkflowIdForMode(
+		value: unknown,
+		list: Workflow[],
+		mode: 'local' | 'api',
+	): number | '' {
+		const id = validWorkflowId(value, list);
+		const workflow = list.find((candidate) => candidate.id === id);
+		return workflow && workflowMatchesKreaMode(workflow, mode) ? id : '';
+	}
+
+	function carryWorkflowValues(
+		values: Record<string, string | number>,
+		previous: Workflow | null,
+		next: Workflow,
+	): Record<string, string | number> {
+		if (!previous) return {};
+		const carried: Record<string, string | number> = {};
+		for (const input of next.input_schema) {
+			const prior = previous.input_schema.find((candidate) => candidate.role === input.role);
+			if (prior && values[prior.nodeId] !== undefined) {
+				carried[input.nodeId] = values[prior.nodeId];
+			}
+		}
+		return carried;
+	}
+
+	function saveWorkflowPreferences() {
+		if (typeof window === 'undefined') return;
+		window.localStorage.setItem(
+			workflowStorageKey(),
+			JSON.stringify({
+				sheet: sheetWorkflowId,
+				environment: envWorkflowId,
+				item: itemWorkflowId,
+			}),
+		);
+	}
 
 	$effect(() => {
 		if (sheetWorkflowId === lastSheetWf) return;
+		const previous = imageWorkflows.find((workflow) => workflow.id === lastSheetWf) ?? null;
+		const next = imageWorkflows.find((workflow) => workflow.id === sheetWorkflowId) ?? null;
 		lastSheetWf = sheetWorkflowId;
-		sheetInputValues = {};
+		sheetInputValues = next ? carryWorkflowValues(sheetInputValues, previous, next) : {};
 		sheetAttempted = false;
 	});
 	$effect(() => {
 		if (envWorkflowId === lastEnvWf) return;
+		const previous = imageWorkflows.find((workflow) => workflow.id === lastEnvWf) ?? null;
+		const next = imageWorkflows.find((workflow) => workflow.id === envWorkflowId) ?? null;
 		lastEnvWf = envWorkflowId;
-		envInputValues = {};
+		envInputValues = next ? carryWorkflowValues(envInputValues, previous, next) : {};
 		envAttempted = false;
 	});
 	$effect(() => {
 		if (itemWorkflowId === lastItemWf) return;
+		const previous = imageWorkflows.find((workflow) => workflow.id === lastItemWf) ?? null;
+		const next = imageWorkflows.find((workflow) => workflow.id === itemWorkflowId) ?? null;
 		lastItemWf = itemWorkflowId;
-		itemInputValues = {};
+		itemInputValues = next ? carryWorkflowValues(itemInputValues, previous, next) : {};
 		itemAttempted = false;
 	});
 
@@ -214,6 +326,7 @@
 			input_values?: Record<string, unknown>;
 			asset_target?: 'sheet';
 			prompt?: string;
+			random_seed?: boolean;
 		}) => projects.generateAssets(projectId, payload),
 		onSuccess: async () => {
 			await client.invalidateQueries({ queryKey: ['assets'] });
@@ -307,6 +420,73 @@
 		drafts = { ...drafts, [key]: value };
 	}
 
+	function negativeFor(key: string, fallback = ''): string {
+		return negativeDrafts[key] ?? fallback;
+	}
+
+	function setNegativeDraft(key: string, value: string) {
+		negativeDrafts = { ...negativeDrafts, [key]: value };
+	}
+
+	function randomSeedFor(key: string): boolean {
+		return randomSeedDrafts[key] ?? true;
+	}
+
+	function setRandomSeed(key: string, value: boolean) {
+		randomSeedDrafts = { ...randomSeedDrafts, [key]: value };
+	}
+
+	async function persistNegativePrompt(
+		kind: 'character' | 'location' | 'item',
+		id: number,
+		value: string,
+	) {
+		const key = kind === 'character' ? charKey(id) : kind === 'location' ? locKey(id) : itemKey(id);
+		setNegativeDraft(key, value);
+		try {
+			if (kind === 'character') {
+				await projects.updateCharacter(projectId, id, { negative_prompt: value });
+			} else if (kind === 'location') {
+				await projects.updateLocation(projectId, id, { negative_prompt: value });
+			} else {
+				await projects.updateItem(projectId, id, { negative_prompt: value });
+			}
+			await client.invalidateQueries({ queryKey: ['assets'] });
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Could not save negative prompt');
+		}
+	}
+
+	function inputValuesWithNegative(
+		workflow: Workflow | null,
+		values: Record<string, string | number>,
+		key: string,
+		prompt?: string,
+		savedNegative = '',
+	): Record<string, unknown> {
+		const negativeInput = workflow?.input_schema.find((input) => input.role === 'negative');
+		const negative = negativeFor(key, savedNegative).trim();
+		const compact = compactInputValues(values);
+		if (!negativeInput || !negative) return compact;
+		if (workflow?.name.toLowerCase().replace(/[_-]+/g, ' ').includes('local fp8') && prompt) {
+			const promptInput = workflow.input_schema.find((input) => input.role === 'prompt');
+			if (promptInput) {
+				const weightedNegative = negative
+					.split(/[,;\n]+/)
+					.map((part) => part.trim())
+					.filter(Boolean)
+					.map((part) => `(${part}:-1.0)`)
+					.join(', ');
+				return {
+					...compact,
+					[negativeInput.nodeId]: negative,
+					[promptInput.nodeId]: `${prompt}\n\n${weightedNegative}`,
+				};
+			}
+		}
+		return { ...compact, [negativeInput.nodeId]: negative };
+	}
+
 	function requireWorkflow(id: number | '', label: string): number | null {
 		if (id === '') {
 			toast.error(`Select a ${label} workflow first`);
@@ -332,7 +512,10 @@
 		const text = promptForChar(c);
 		savingKey = key;
 		try {
-			await projects.updateCharacter(projectId, c.id, { consistency_prompt: text });
+			await projects.updateCharacter(projectId, c.id, {
+				consistency_prompt: text,
+				negative_prompt: negativeFor(key, c.negative_prompt ?? ''),
+			});
 			const { [key]: _, ...rest } = drafts;
 			drafts = rest;
 			await client.invalidateQueries({ queryKey: ['assets'] });
@@ -350,7 +533,10 @@
 		const text = promptForLoc(loc);
 		savingKey = key;
 		try {
-			await projects.updateLocation(projectId, loc.id, { consistency_prompt: text });
+			await projects.updateLocation(projectId, loc.id, {
+				consistency_prompt: text,
+				negative_prompt: negativeFor(key, loc.negative_prompt ?? ''),
+			});
 			const { [key]: _, ...rest } = drafts;
 			drafts = rest;
 			await client.invalidateQueries({ queryKey: ['assets'] });
@@ -368,7 +554,10 @@
 		const text = promptForItem(item);
 		savingKey = key;
 		try {
-			await projects.updateItem(projectId, item.id, { consistency_prompt: text });
+			await projects.updateItem(projectId, item.id, {
+				consistency_prompt: text,
+				negative_prompt: negativeFor(key, item.negative_prompt ?? ''),
+			});
 			const { [key]: _, ...rest } = drafts;
 			drafts = rest;
 			await client.invalidateQueries({ queryKey: ['assets'] });
@@ -387,7 +576,10 @@
 		if (!requireComplete(sheetMissing, () => (sheetAttempted = true))) return;
 		const prompt = sheetHasPrompt ? promptForChar(c) : '';
 		if (sheetHasPrompt) {
-			await projects.updateCharacter(projectId, c.id, { consistency_prompt: prompt });
+			await projects.updateCharacter(projectId, c.id, {
+				consistency_prompt: prompt,
+				negative_prompt: negativeFor(charKey(c.id), c.negative_prompt ?? ''),
+			});
 			const { [charKey(c.id)]: _, ...rest } = drafts;
 			drafts = rest;
 		}
@@ -397,7 +589,14 @@
 			location_ids: [],
 			asset_target: 'sheet',
 			workflow_id: wfId,
-			input_values: compactInputValues(sheetInputValues),
+			input_values: inputValuesWithNegative(
+				sheetWorkflow,
+				sheetInputValues,
+				charKey(c.id),
+				prompt,
+				c.negative_prompt ?? '',
+			),
+			random_seed: randomSeedFor(charKey(c.id)),
 			prompt: prompt || undefined,
 		});
 	}
@@ -408,7 +607,10 @@
 		if (!requireComplete(envMissing, () => (envAttempted = true))) return;
 		const prompt = envHasPrompt ? promptForLoc(loc) : '';
 		if (envHasPrompt) {
-			await projects.updateLocation(projectId, loc.id, { consistency_prompt: prompt });
+			await projects.updateLocation(projectId, loc.id, {
+				consistency_prompt: prompt,
+				negative_prompt: negativeFor(locKey(loc.id), loc.negative_prompt ?? ''),
+			});
 			const { [locKey(loc.id)]: _, ...rest } = drafts;
 			drafts = rest;
 		}
@@ -417,7 +619,14 @@
 			character_ids: [],
 			location_ids: [loc.id],
 			workflow_id: wfId,
-			input_values: compactInputValues(envInputValues),
+			input_values: inputValuesWithNegative(
+				envWorkflow,
+				envInputValues,
+				locKey(loc.id),
+				prompt,
+				loc.negative_prompt ?? '',
+			),
+			random_seed: randomSeedFor(locKey(loc.id)),
 			prompt: prompt || undefined,
 		});
 	}
@@ -428,7 +637,10 @@
 		if (!requireComplete(itemMissing, () => (itemAttempted = true))) return;
 		const prompt = itemHasPrompt ? promptForItem(item) : '';
 		if (itemHasPrompt) {
-			await projects.updateItem(projectId, item.id, { consistency_prompt: prompt });
+			await projects.updateItem(projectId, item.id, {
+				consistency_prompt: prompt,
+				negative_prompt: negativeFor(itemKey(item.id), item.negative_prompt ?? ''),
+			});
 			const { [itemKey(item.id)]: _, ...rest } = drafts;
 			drafts = rest;
 		}
@@ -438,7 +650,14 @@
 			location_ids: [],
 			item_ids: [item.id],
 			workflow_id: wfId,
-			input_values: compactInputValues(itemInputValues),
+			input_values: inputValuesWithNegative(
+				itemWorkflow,
+				itemInputValues,
+				itemKey(item.id),
+				prompt,
+				item.negative_prompt ?? '',
+			),
+			random_seed: randomSeedFor(itemKey(item.id)),
 			prompt: prompt || undefined,
 		});
 	}
@@ -466,6 +685,9 @@
 					workflow_id: sheetWf,
 					character_ids: chars.map((c) => c.id),
 					input_values: compactInputValues(sheetInputValues),
+					random_seed_by_asset: Object.fromEntries(
+						chars.map((c) => ['character:' + c.id, randomSeedFor(charKey(c.id))]),
+					),
 				});
 				total += r.jobs.length;
 			}
@@ -476,6 +698,9 @@
 					character_ids: [],
 					location_ids: locs.map((l) => l.id),
 					input_values: compactInputValues(envInputValues),
+					random_seed_by_asset: Object.fromEntries(
+						locs.map((loc) => ['location:' + loc.id, randomSeedFor(locKey(loc.id))]),
+					),
 				});
 				total += r.jobs.length;
 			}
@@ -487,6 +712,9 @@
 					location_ids: [],
 					item_ids: items.map((it) => it.id),
 					input_values: compactInputValues(itemInputValues),
+					random_seed_by_asset: Object.fromEntries(
+						items.map((item) => ['item:' + item.id, randomSeedFor(itemKey(item.id))]),
+					),
 				});
 				total += r.jobs.length;
 			}
@@ -503,8 +731,8 @@
 		}
 	}
 
-	function goToStory() {
-		goto('?stage=story', { keepFocus: true, noScroll: true });
+	function goToScript() {
+		goto('?stage=script', { keepFocus: true, noScroll: true });
 	}
 
 	function uploadKey(kind: DeleteTarget['kind'], id: number) {
@@ -619,10 +847,10 @@
 	</div>
 </div>
 
-{#if imageWorkflows.length === 0}
+{#if modeWorkflows.length === 0}
 	<p class="hint-warn">
-		Enable an image workflow in <a href="/settings?tab=workflows">Settings → Workflows</a> before
-		generating.
+		Enable a {krea2Mode} Krea workflow in
+		<a href="/settings?tab=workflows">Settings → Workflows</a> before generating.
 	</p>
 {/if}
 
@@ -647,12 +875,13 @@
 				onchange={(e) => {
 					const v = e.currentTarget.value;
 					sheetWorkflowId = v ? Number(v) : '';
+					saveWorkflowPreferences();
 				}}
 			>
-				{#if imageWorkflows.length === 0}
+				{#if modeWorkflows.length === 0}
 					<option value="">No enabled image workflows</option>
 				{:else}
-					{#each imageWorkflows as w}
+					{#each modeWorkflows as w}
 						<option value={w.id}>{w.name}</option>
 					{/each}
 				{/if}
@@ -660,7 +889,7 @@
 		</label>
 		{#if sheetWorkflow}
 			<ComfyDynamicForm
-				inputs={withoutPromptInputs(sheetWorkflow.input_schema)}
+				inputs={withoutPromptAndNegativeInputs(sheetWorkflow.input_schema)}
 				bind:values={sheetInputValues}
 				assetOptions={assetOptions}
 				showErrors={sheetAttempted}
@@ -678,12 +907,13 @@
 				onchange={(e) => {
 					const v = e.currentTarget.value;
 					envWorkflowId = v ? Number(v) : '';
+					saveWorkflowPreferences();
 				}}
 			>
-				{#if imageWorkflows.length === 0}
+				{#if modeWorkflows.length === 0}
 					<option value="">No enabled image workflows</option>
 				{:else}
-					{#each imageWorkflows as w}
+					{#each modeWorkflows as w}
 						<option value={w.id}>{w.name}</option>
 					{/each}
 				{/if}
@@ -691,7 +921,7 @@
 		</label>
 		{#if envWorkflow}
 			<ComfyDynamicForm
-				inputs={withoutPromptInputs(envWorkflow.input_schema)}
+				inputs={withoutPromptAndNegativeInputs(envWorkflow.input_schema)}
 				bind:values={envInputValues}
 				assetOptions={assetOptions}
 				showErrors={envAttempted}
@@ -709,12 +939,13 @@
 				onchange={(e) => {
 					const v = e.currentTarget.value;
 					itemWorkflowId = v ? Number(v) : '';
+					saveWorkflowPreferences();
 				}}
 			>
-				{#if imageWorkflows.length === 0}
+				{#if modeWorkflows.length === 0}
 					<option value="">No enabled image workflows</option>
 				{:else}
-					{#each imageWorkflows as w}
+					{#each modeWorkflows as w}
 						<option value={w.id}>{w.name}</option>
 					{/each}
 				{/if}
@@ -722,7 +953,7 @@
 		</label>
 		{#if itemWorkflow}
 			<ComfyDynamicForm
-				inputs={withoutPromptInputs(itemWorkflow.input_schema)}
+				inputs={withoutPromptAndNegativeInputs(itemWorkflow.input_schema)}
 				bind:values={itemInputValues}
 				assetOptions={assetOptions}
 				showErrors={itemAttempted}
@@ -759,7 +990,7 @@
 					<Icon name="assets" size={28} />
 				{/snippet}
 				{#snippet action()}
-					<Button variant="primary" onclick={goToStory}>Go to Story</Button>
+					<Button variant="primary" onclick={goToScript}>Continue to Script</Button>
 				{/snippet}
 			</EmptyState>
 		{:else}
@@ -923,6 +1154,26 @@
 											oninput={(e) => setDraft(key, e.currentTarget.value)}
 										></textarea>
 									</label>
+									{#if sheetHasNegative}
+										<label class="prompt-field">
+											<span class="field-label">Negative prompt (optional)</span>
+											<textarea
+												class="field-textarea"
+												rows="3"
+												value={negativeFor(key, char.negative_prompt ?? '')}
+												oninput={(e) => setNegativeDraft(key, e.currentTarget.value)}
+												onblur={(e) => persistNegativePrompt('character', char.id, e.currentTarget.value)}
+											></textarea>
+										</label>
+									{/if}
+									<label class="checkbox-field">
+										<input
+											type="checkbox"
+											checked={randomSeedFor(key)}
+											onchange={(e) => setRandomSeed(key, e.currentTarget.checked)}
+										/>
+										<span>Random seed</span>
+									</label>
 									<div class="row">
 										<Button
 											variant="ghost"
@@ -962,7 +1213,7 @@
 					<Icon name="folder" size={28} />
 				{/snippet}
 				{#snippet action()}
-					<Button variant="primary" onclick={goToStory}>Go to Story</Button>
+					<Button variant="primary" onclick={goToScript}>Continue to Script</Button>
 				{/snippet}
 			</EmptyState>
 		{:else}
@@ -1112,6 +1363,26 @@
 											oninput={(e) => setDraft(key, e.currentTarget.value)}
 										></textarea>
 									</label>
+									{#if envHasNegative}
+										<label class="prompt-field">
+											<span class="field-label">Negative prompt (optional)</span>
+											<textarea
+												class="field-textarea"
+												rows="3"
+												value={negativeFor(key, loc.negative_prompt ?? '')}
+												oninput={(e) => setNegativeDraft(key, e.currentTarget.value)}
+												onblur={(e) => persistNegativePrompt('location', loc.id, e.currentTarget.value)}
+											></textarea>
+										</label>
+									{/if}
+									<label class="checkbox-field">
+										<input
+											type="checkbox"
+											checked={randomSeedFor(key)}
+											onchange={(e) => setRandomSeed(key, e.currentTarget.checked)}
+										/>
+										<span>Random seed</span>
+									</label>
 									<div class="row">
 										<Button
 											variant="ghost"
@@ -1151,7 +1422,7 @@
 					<Icon name="folder" size={28} />
 				{/snippet}
 				{#snippet action()}
-					<Button variant="primary" onclick={goToStory}>Go to Story</Button>
+					<Button variant="primary" onclick={goToScript}>Continue to Script</Button>
 				{/snippet}
 			</EmptyState>
 		{:else}
@@ -1300,6 +1571,26 @@
 											value={promptForItem(item)}
 											oninput={(e) => setDraft(key, e.currentTarget.value)}
 										></textarea>
+									</label>
+									{#if itemHasNegative}
+										<label class="prompt-field">
+											<span class="field-label">Negative prompt (optional)</span>
+											<textarea
+												class="field-textarea"
+												rows="3"
+												value={negativeFor(key, item.negative_prompt ?? '')}
+												oninput={(e) => setNegativeDraft(key, e.currentTarget.value)}
+												onblur={(e) => persistNegativePrompt('item', item.id, e.currentTarget.value)}
+											></textarea>
+										</label>
+									{/if}
+									<label class="checkbox-field">
+										<input
+											type="checkbox"
+											checked={randomSeedFor(key)}
+											onchange={(e) => setRandomSeed(key, e.currentTarget.checked)}
+										/>
+										<span>Random seed</span>
 									</label>
 									<div class="row">
 										<Button
@@ -1611,6 +1902,17 @@
 		display: block;
 		padding: 12px;
 		margin: 0;
+	}
+	.prompt-fold .checkbox-field {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 0 12px 12px;
+		color: var(--text-secondary);
+		font-size: 12px;
+	}
+	.prompt-fold .checkbox-field input {
+		accent-color: var(--accent);
 	}
 	.prompt-fold .row {
 		padding: 0 12px 12px;

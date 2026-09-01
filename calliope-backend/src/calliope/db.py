@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS characters (
     portrait_path TEXT,
     sheet_path TEXT,
     consistency_prompt TEXT,
+    negative_prompt TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS locations (
     description TEXT,
     reference_image_path TEXT,
     consistency_prompt TEXT,
+    negative_prompt TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -59,6 +61,7 @@ CREATE TABLE IF NOT EXISTS items (
     description TEXT,
     reference_image_path TEXT,
     consistency_prompt TEXT,
+    negative_prompt TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -195,6 +198,10 @@ async def migrate_db(db_path: Path) -> None:
         )
     if "video_settings_json" not in scene_cols:
         conn.execute("ALTER TABLE scenes ADD COLUMN video_settings_json TEXT")
+    for table in ("characters", "locations", "items"):
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if "negative_prompt" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN negative_prompt TEXT")
     project_cols = {r[1] for r in conn.execute("PRAGMA table_info(projects)").fetchall()}
     if "cover_path" not in project_cols:
         conn.execute("ALTER TABLE projects ADD COLUMN cover_path TEXT")

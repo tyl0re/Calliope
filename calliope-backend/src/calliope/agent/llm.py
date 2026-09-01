@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, AsyncIterator
+from urllib.parse import urlparse
 
 import httpx
 
@@ -14,6 +15,12 @@ logger = logging.getLogger("calliope.llm")
 # chat()/chat_with_tools() then fall back to one plain blocking POST. Anything
 # else (401, 429, 5xx) is a real error and re-raises.
 _STREAM_UNSUPPORTED_STATUS = frozenset({400, 404, 405, 501})
+
+
+def _model_supports_temperature(model: str) -> bool:
+    """Codex-backed models reject the legacy temperature parameter."""
+    normalized = str(model or "").strip().lower()
+    return not (normalized.startswith("b-openai/") or "codex" in normalized)
 
 
 class LLMClient:
@@ -49,6 +56,16 @@ class LLMClient:
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
+            parsed = urlparse(self.base_url)
+            safe_transport = parsed.scheme == "https" or (
+                parsed.scheme == "http"
+                and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+            )
+            if not safe_transport:
+                raise RuntimeError(
+                    "Refusing to send an LLM API key over a non-local HTTP endpoint; "
+                    "use HTTPS or a loopback URL."
+                )
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
@@ -98,8 +115,9 @@ class LLMClient:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature,
         }
+        if _model_supports_temperature(self.model):
+            payload["temperature"] = temperature
         if response_format:
             payload["response_format"] = response_format
 
@@ -173,8 +191,9 @@ class LLMClient:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature,
         }
+        if _model_supports_temperature(self.model):
+            payload["temperature"] = temperature
         if tools:
             payload["tools"] = tools
             if tool_choice is not None:
@@ -222,9 +241,10 @@ class LLMClient:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature,
             "stream": True,
         }
+        if _model_supports_temperature(self.model):
+            payload["temperature"] = temperature
         if tools:
             payload["tools"] = tools
             if tool_choice is not None:
@@ -236,7 +256,9 @@ class LLMClient:
         tool_acc: dict[int, dict[str, Any]] = {}
         while True:
             retry_without: str | None = None
-            async with self.client.stream("POST", url, headers=self._headers(), json=payload) as resp:
+            async with self.client.stream(
+                "POST", url, headers=self._headers(), json=payload
+            ) as resp:
                 if resp.status_code == 400:
                     # Read body for logging, then drop optional fields one at a
                     # time before giving up.

@@ -158,13 +158,16 @@ async def generate_story(project_id: int, replace: bool = True) -> dict[str, Any
                 "appearance": appearance,
                 "personality": character.get("personality", ""),
             }
-            # Seed with the published sheet template so Assets shows a real prompt, not a hidden blob.
+            # Seed with the published sheet template so Assets shows a real prompt.
             sheet_prompt = character_sheet_prompt(row_seed)
             conn.execute(
                 """
                 INSERT INTO characters
                 (project_id, name, role, age, appearance, personality, consistency_prompt)
-                VALUES (:project_id, :name, :role, :age, :appearance, :personality, :consistency_prompt)
+                VALUES (
+                    :project_id, :name, :role, :age, :appearance, :personality,
+                    :consistency_prompt
+                )
                 """,
                 {
                     "project_id": project_id,
@@ -239,33 +242,40 @@ async def get_story(project_id: int) -> dict[str, Any]:
     conn = get_db(settings.db_path)
     try:
         project = conn.execute(
-            "SELECT id, title, idea, genre, tone, target_duration, status FROM projects WHERE id = ?",
+            """
+            SELECT id, title, idea, genre, tone, target_duration, status
+            FROM projects WHERE id = ?
+            """,
             (project_id,),
         ).fetchone()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
         beats = conn.execute(
-            "SELECT id, order_index, title, description FROM story_beats WHERE project_id = ? ORDER BY order_index",
+            """
+            SELECT id, order_index, title, description
+            FROM story_beats WHERE project_id = ? ORDER BY order_index
+            """,
             (project_id,),
         ).fetchall()
         characters = conn.execute(
             """
-            SELECT id, name, role, age, appearance, personality, portrait_path, sheet_path, consistency_prompt
+            SELECT id, name, role, age, appearance, personality, portrait_path,
+                   sheet_path, consistency_prompt, negative_prompt
             FROM characters WHERE project_id = ?
             """,
             (project_id,),
         ).fetchall()
         locations = conn.execute(
             """
-            SELECT id, name, description, reference_image_path, consistency_prompt
+            SELECT id, name, description, reference_image_path, consistency_prompt, negative_prompt
             FROM locations WHERE project_id = ?
             """,
             (project_id,),
         ).fetchall()
         items = conn.execute(
             """
-            SELECT id, name, description, reference_image_path, consistency_prompt
+            SELECT id, name, description, reference_image_path, consistency_prompt, negative_prompt
             FROM items WHERE project_id = ?
             """,
             (project_id,),
@@ -275,7 +285,7 @@ async def get_story(project_id: int) -> dict[str, Any]:
             "project": row_to_dict(project),
             "beats": [row_to_dict(b) for b in beats],
             "characters": [row_to_dict(c) for c in characters],
-            "locations": [row_to_dict(l) for l in locations],
+            "locations": [row_to_dict(location) for location in locations],
             "items": [row_to_dict(i) for i in items],
         }
     finally:
@@ -365,8 +375,11 @@ async def create_character(project_id: int, payload: CharacterCreate) -> dict[st
         cur = conn.execute(
             """
             INSERT INTO characters
-            (project_id, name, role, age, appearance, personality, consistency_prompt)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (
+                project_id, name, role, age, appearance, personality,
+                consistency_prompt, negative_prompt
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 project_id,
@@ -376,6 +389,7 @@ async def create_character(project_id: int, payload: CharacterCreate) -> dict[st
                 payload.appearance,
                 payload.personality,
                 consistency,
+                payload.negative_prompt,
             ),
         )
         _touch_project(conn, project_id)
@@ -441,10 +455,11 @@ async def create_location(project_id: int, payload: LocationCreate) -> dict[str,
         )
         cur = conn.execute(
             """
-            INSERT INTO locations (project_id, name, description, consistency_prompt)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO locations
+            (project_id, name, description, consistency_prompt, negative_prompt)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (project_id, payload.name, payload.description, consistency),
+            (project_id, payload.name, payload.description, consistency, payload.negative_prompt),
         )
         _touch_project(conn, project_id)
         conn.commit()
@@ -509,10 +524,10 @@ async def create_item(project_id: int, payload: ItemCreate) -> dict[str, Any]:
         )
         cur = conn.execute(
             """
-            INSERT INTO items (project_id, name, description, consistency_prompt)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO items (project_id, name, description, consistency_prompt, negative_prompt)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (project_id, payload.name, payload.description, consistency),
+            (project_id, payload.name, payload.description, consistency, payload.negative_prompt),
         )
         _touch_project(conn, project_id)
         conn.commit()

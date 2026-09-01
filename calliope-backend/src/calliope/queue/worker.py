@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
+import secrets
+from pathlib import Path
 from typing import Any
-
-from pathlib import Path as _fs_path
 
 from calliope import config
 from calliope.comfyui.client import ComfyUIClient
@@ -20,6 +21,25 @@ from calliope.export.runner import run_export
 from calliope.queue.manager import queue_manager
 
 logger = logging.getLogger("calliope.worker")
+
+
+def randomize_sampler_seeds(workflow: dict[str, Any]) -> dict[str, Any]:
+    randomized = copy.deepcopy(workflow)
+    for node in randomized.values():
+        if not isinstance(node, dict):
+            continue
+        class_type = node.get("class_type")
+        if class_type == "PrimitiveInt":
+            title = str(node.get("_meta", {}).get("title", ""))
+            if "(Input:seed)" in title:
+                node.setdefault("inputs", {})["value"] = secrets.randbelow(2**31)
+            continue
+        if class_type not in {"KSampler", "KSamplerAdvanced"}:
+            continue
+        inputs = node.setdefault("inputs", {})
+        seed_key = "noise_seed" if class_type == "KSamplerAdvanced" else "seed"
+        inputs[seed_key] = secrets.randbelow(2**63)
+    return randomized
 
 
 class QueueWorker:
@@ -130,13 +150,14 @@ class QueueWorker:
             workflow = self._load_workflow(workflow_id)
             if not workflow:
                 raise RuntimeError("No workflow found for job")
-
             input_values = payload.get("input_values") or {}
             if payload.get("continue_source") and kind == "video":
                 input_values = await self._resolve_continue_source(
                     job, payload, workflow, dict(input_values)
                 )
             patched = patch_workflow(workflow, input_values)
+            if payload.get("random_seed", False):
+                patched = randomize_sampler_seeds(patched)
             patched = await client.prepare_media_inputs(patched)
             prompt_id = await client.queue_prompt(patched)
 
@@ -155,6 +176,8 @@ class QueueWorker:
             paths: list[str] = []
             for meta in outputs_meta:
                 filename = meta["filename"]
+                if not filename or Path(filename).name != filename:
+                    raise RuntimeError(f"Unsafe ComfyUI output filename: {filename!r}")
                 dest = dest_dir / filename
                 await client.download_image(
                     filename,
@@ -213,7 +236,7 @@ class QueueWorker:
             raise RuntimeError(
                 f"Continue scene {scene_n}: no earlier scene in this project to continue from."
             )
-        if not prev_clip or not _fs_path(prev_clip).exists():
+        if not prev_clip or not Path(prev_clip).exists():
             raise RuntimeError(
                 f"Continue scene {scene_n}: previous clip (scene {prev_order}) has no video file "
                 "— generate the earlier clip first."

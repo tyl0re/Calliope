@@ -42,6 +42,8 @@ ScreenShots/
 docs/*
 !docs/changelogs/
 !docs/changelogs/**
+!docs/COMFYUI_NODES.md
+!docs/CHANGELOG_WORKFLOW_FEATURES.md
 prototype/
 2026-*.md
 !docs/changelogs/*.md

@@ -24,13 +24,6 @@ class ProjectUpdate(BaseModel):
     status: str | None = None
 
 
-class ProjectStats(BaseModel):
-    scene_count: int
-    character_count: int
-    asset_ready_count: int
-    asset_total_count: int
-
-
 class Project(BaseModel):
     id: int
     title: str
@@ -77,6 +70,7 @@ class CharacterCreate(BaseModel):
     appearance: str | None = None
     personality: str | None = None
     consistency_prompt: str | None = None
+    negative_prompt: str | None = None
 
 
 class CharacterUpdate(BaseModel):
@@ -86,6 +80,7 @@ class CharacterUpdate(BaseModel):
     appearance: str | None = None
     personality: str | None = None
     consistency_prompt: str | None = None
+    negative_prompt: str | None = None
     portrait_path: str | None = None
     sheet_path: str | None = None
 
@@ -94,12 +89,14 @@ class LocationCreate(BaseModel):
     name: str = Field(..., min_length=1)
     description: str | None = None
     consistency_prompt: str | None = None
+    negative_prompt: str | None = None
 
 
 class LocationUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     consistency_prompt: str | None = None
+    negative_prompt: str | None = None
     reference_image_path: str | None = None
 
 
@@ -107,12 +104,14 @@ class ItemCreate(BaseModel):
     name: str = Field(..., min_length=1)
     description: str | None = None
     consistency_prompt: str | None = None
+    negative_prompt: str | None = None
 
 
 class ItemUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     consistency_prompt: str | None = None
+    negative_prompt: str | None = None
     reference_image_path: str | None = None
 
 
@@ -192,6 +191,8 @@ class GenerateAssetsRequest(BaseModel):
     asset_target: str | None = "sheet"
     # Optional one-shot prompt override (must still be user-visible text from the UI).
     prompt: str | None = None
+    random_seed: bool = True
+    random_seed_by_asset: dict[str, bool] | None = None
 
 
 class GenerateScenesRequest(BaseModel):

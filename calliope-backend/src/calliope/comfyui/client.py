@@ -5,13 +5,27 @@ import logging
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
+from calliope.comfyui.registry import (
+    AUDIO_CLASSES,
+    IMAGE_CLASSES,
+    VIDEO_CLASSES,
+    VIDEO_FILE_CLASSES,
+)
 from calliope.config import settings
-from calliope.comfyui.registry import IMAGE_CLASSES, AUDIO_CLASSES, VIDEO_CLASSES, VIDEO_FILE_CLASSES
 
 logger = logging.getLogger("calliope.comfyui")
+_COMFY_API_NODE_TYPES = frozenset({"Krea2ImageNode", "Krea2StyleReferenceNode"})
+
+
+def _api_key_transport_is_safe(base_url: str) -> bool:
+    parsed = urlparse(base_url)
+    if parsed.scheme == "https":
+        return True
+    return parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
 
 
 def _surface_error(prefix: str, resp: httpx.Response) -> RuntimeError:
@@ -161,6 +175,17 @@ class ComfyUIClient:
 
     async def queue_prompt(self, workflow: dict[str, Any]) -> str:
         payload = {"prompt": workflow, "client_id": self.client_id}
+        uses_comfy_api_node = any(
+            isinstance(node, dict) and node.get("class_type") in _COMFY_API_NODE_TYPES
+            for node in workflow.values()
+        )
+        if settings.comfyui_api_key and uses_comfy_api_node:
+            if not _api_key_transport_is_safe(self.base_url):
+                raise RuntimeError(
+                    "Refusing to send the ComfyUI API key over a non-local HTTP endpoint; "
+                    "use HTTPS or a loopback ComfyUI URL."
+                )
+            payload["extra_data"] = {"api_key_comfy_org": settings.comfyui_api_key}
         resp = await self._http.post(f"{self.base_url}/prompt", json=payload)
         if resp.status_code >= 400:
             raise _surface_error("ComfyUI rejected the workflow", resp)

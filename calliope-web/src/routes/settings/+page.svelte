@@ -35,6 +35,8 @@
 		llm_active_id: 'llm',
 		llm_api_key: 'llm',
 		comfyui_base_url: 'comfy',
+		comfyui_api_key: 'comfy',
+		krea2_mode: 'comfy',
 		dry_run: 'comfy',
 		queue_concurrency: 'queue',
 		queue_poll_interval_sec: 'queue',
@@ -105,7 +107,13 @@
 				if (k === 'llm_profiles' || k === 'llm_active_id') continue;
 				// Allow false for dry_run; skip empty optional strings only.
 				// agent_hardening_prompt may be emptied to disable hardening.
-				if (v === '' && k !== 'dry_run' && k !== 'agent_hardening_prompt') continue;
+				if (
+					v === '' &&
+					k !== 'dry_run' &&
+					k !== 'agent_hardening_prompt' &&
+					k !== 'comfyui_api_key'
+				)
+					continue;
 				if (typeof v === 'string' && (k.includes('_dir') || k.endsWith('_dir'))) {
 					// Strip wrapping quotes users often paste from Explorer
 					const cleaned = v.trim().replace(/^["']|["']$/g, '');
@@ -389,8 +397,8 @@
 											<p class="field-error">{validationErrors[`llm_name_${profile.id}`]}</p>
 										{/if}
 									</label>
-									<label class="field">
-										<span class="field-label">Base URL</span>
+		<label class="field">
+			<span class="field-label">Base URL</span>
 										<input
 											class="field-input"
 											class:invalid={validationErrors[`llm_url_${profile.id}`]}
@@ -455,9 +463,36 @@
 							<p class="field-hint">
 								Calliope talks to Comfy over HTTP only. Comfy’s own input/output folders stay in
 								ComfyUI — set them there, not here.
-							</p>
-						</label>
-						<label class="check">
+			</p>
+		</label>
+		<label class="field">
+			<span class="field-label">ComfyUI API key</span>
+			<input
+				class="field-input"
+				type="password"
+				value={String(fieldValue('comfyui_api_key', ''))}
+				oninput={(e) => (draft.comfyui_api_key = e.currentTarget.value)}
+				placeholder={s.comfyui_api_key ? '•••••••• (saved)' : 'Required for Comfy API nodes'}
+			/>
+			<p class="field-hint">
+				Used only for ComfyUI partner/API nodes such as Krea. Stored in the local config file.
+			</p>
+		</label>
+		<label class="field">
+			<span class="field-label">Krea 2 generation mode</span>
+			<select
+				class="field-select"
+				value={String(fieldValue('krea2_mode', s.krea2_mode))}
+				onchange={(e) => (draft.krea2_mode = e.currentTarget.value)}
+			>
+				<option value="local">Local FP8 + LoRA</option>
+				<option value="api">Krea API</option>
+			</select>
+			<p class="field-hint">
+				Local uses your FP8/LoRA workflow. API uses the hosted Krea/ComfyUI node and its account limits.
+			</p>
+		</label>
+		<label class="check">
 							<input
 								type="checkbox"
 								checked={dryRunChecked(s)}

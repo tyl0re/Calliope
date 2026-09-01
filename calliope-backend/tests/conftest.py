@@ -11,6 +11,14 @@ from calliope.db import migrate_db
 from calliope.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def ensure_default_database_schema():
+    """Keep direct DB tests usable without requiring the HTTP client fixture."""
+    import calliope.config as config_module
+
+    asyncio.run(migrate_db(config_module.settings.db_path))
+
+
 @pytest.fixture
 def client(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:

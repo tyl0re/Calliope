@@ -4,10 +4,10 @@ from __future__ import annotations
 from typing import Any
 
 from calliope.comfyui.registry import (
-    ComfyOutputKind,
-    IMAGE_CLASSES,
     AUDIO_CLASSES,
+    IMAGE_CLASSES,
     VIDEO_CLASSES,
+    ComfyOutputKind,
     class_to_input_kind,
     class_to_output_kind,
 )
@@ -44,14 +44,16 @@ def parse_dynamic_inputs(workflow: dict[str, Any]) -> list[dict[str, Any]]:
         kind, role, label = parse_title_tag(title)
         if kind != "input":
             continue
+        canonical_role = normalize_input_role(role)
         results.append(
             {
                 "nodeId": str(node_id),
                 "label": label or node.get("class_type", node_id),
-                "role": normalize_input_role(role),
+                "role": canonical_role,
                 "kind": class_to_input_kind(node.get("class_type", "")),
                 "defaultValue": extract_default_value(node),
-                "required": True,
+                # Negative prompts are optional in OpenAI-compatible image nodes.
+                "required": canonical_role != "negative",
             }
         )
     return results

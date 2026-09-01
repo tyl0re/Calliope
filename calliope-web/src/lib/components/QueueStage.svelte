@@ -172,6 +172,12 @@
 		if (lastFormScene != null) formCache.set(lastFormScene, formValues);
 		lastFormScene = id;
 		if (id != null) {
+			const persistedWorkflow = selected?.video_settings?.form_workflow_id;
+			if (persistedWorkflow != null) {
+				selectedWorkflow = { ...selectedWorkflow, [id]: persistedWorkflow };
+			}
+			const persistedSource = selected?.video_settings?.clip_source;
+			if (persistedSource) clipSource = { ...clipSource, [id]: persistedSource };
 			const stored = formCache.get(id);
 			if (stored) {
 				formValues = { ...stored };
@@ -384,8 +390,17 @@
 	}
 
 	function workflowFor(scene: Scene): Workflow | undefined {
-		const id = selectedWorkflow[scene.id] ?? scene.workflow_id ?? undefined;
-		return enabledWorkflows.find((w) => w.id === id) ?? enabledWorkflows[0] ?? undefined;
+		const id =
+			selectedWorkflow[scene.id] ??
+			scene.video_settings?.form_workflow_id ??
+			scene.workflow_id ??
+			undefined;
+		return (
+			enabledWorkflows.find((w) => w.id === id) ??
+			[...enabledWorkflows].sort((a, b) => a.id - b.id)[0] ??
+			enabledWorkflows[0] ??
+			undefined
+		);
 	}
 
 	function jobForScene(sceneId: number): Job | undefined {

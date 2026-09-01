@@ -262,6 +262,15 @@ async def test_chat_stream_normal_tokens_unaffected(monkeypatch):
     assert events[0]["content"] == "Hi"
 
 
+async def test_codex_models_omit_temperature(monkeypatch):
+    router = _FakeRouter(content="OK", reject_response_format=False)
+    client = LLMClient(model="b-openai/gpt-5.5")
+    monkeypatch.setattr(client, "client", httpx.AsyncClient(transport=httpx.MockTransport(router)))
+
+    assert await client.chat([{"role": "user", "content": "hi"}]) == "OK"
+    assert "temperature" not in router.requests[0]
+
+
 # ---------- reasoning-only replies (thinking models returning no `content`) ----------
 # Reasoning models served via OpenAI-compatible endpoints can spend the whole
 # completion in a reasoning channel (e.g. `reasoning_content`) and return a

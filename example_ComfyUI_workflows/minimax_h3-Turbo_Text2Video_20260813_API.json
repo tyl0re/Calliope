@@ -217,7 +217,7 @@
       "sage_attention": "auto",
       "allow_compile": false,
       "model": [
-        "6020",
+        "6010",
         0
       ]
     },
@@ -402,27 +402,6 @@
     "class_type": "Power Lora Loader (rgthree)",
     "_meta": {
       "title": "Power Lora Loader (rgthree)"
-    }
-  },
-  "6020": {
-    "inputs": {
-      "tau": 1.2,
-      "start_percent": 0.2,
-      "end_percent": 0.9,
-      "min_tokens": 4096,
-      "int8_qk": false,
-      "sink_conditioning": "exact_kv",
-      "morton": false,
-      "morton_curve": "3d",
-      "verbose": false,
-      "model": [
-        "6010",
-        0
-      ]
-    },
-    "class_type": "SolAttnPatch",
-    "_meta": {
-      "title": "Patch Sol-Attn"
     }
   },
   "6059": {

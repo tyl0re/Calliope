@@ -29,6 +29,21 @@ export function withoutPromptInputs(inputs: ComfyDynamicInput[] | undefined | nu
 	return inputs.filter((inp) => !isPromptLikeInput(inp));
 }
 
+/** Negative prompt input — supports canonical roles and legacy labels. */
+export function isNegativePromptInput(inp: ComfyDynamicInput): boolean {
+	const role = roleOf(inp);
+	if (role) return role === 'negative';
+	return (inp.label || '').toLowerCase().includes('negative');
+}
+
+/** Drop prompt and negative-prompt fields from shared workflow forms. */
+export function withoutPromptAndNegativeInputs(
+	inputs: ComfyDynamicInput[] | undefined | null,
+): ComfyDynamicInput[] {
+	if (!inputs?.length) return [];
+	return inputs.filter((inp) => !isPromptLikeInput(inp) && !isNegativePromptInput(inp));
+}
+
 /** True if this workflow schema has a prompt-role (or legacy prompt-like) (Input). */
 export function workflowHasPromptInput(inputs: ComfyDynamicInput[] | undefined | null): boolean {
 	if (!inputs?.length) return false;

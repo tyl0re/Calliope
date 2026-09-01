@@ -1,0 +1,55 @@
+{
+  "1": {
+    "class_type": "PrimitiveStringMultiline",
+    "inputs": {
+      "value": ""
+    },
+    "_meta": {
+      "title": "(Input:prompt) Prompt"
+    }
+  },
+  "2": {
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": 0
+    },
+    "_meta": {
+      "title": "(Input:seed) Seed"
+    }
+  },
+  "3": {
+    "class_type": "Krea2ImageNode",
+    "inputs": {
+      "prompt": [
+        "1",
+        0
+      ],
+      "model": "Krea 2 Medium Turbo",
+      "model.aspect_ratio": "16:9",
+      "model.resolution": "1K",
+      "model.creativity": "medium",
+      "model.moodboard_id": "",
+      "model.moodboard_strength": 0.35,
+      "seed": [
+        "2",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Krea 2 Image (API)"
+    }
+  },
+  "4": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "3",
+        0
+      ],
+      "filename_prefix": "Calliope/Krea2-CharacterSheet"
+    },
+    "_meta": {
+      "title": "(Output:image) Save Image"
+    }
+  }
+}

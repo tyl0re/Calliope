@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -28,6 +28,8 @@ class SettingsUpdate(BaseModel):
     llm_active_id: str | None = None
     agent_llm_assignments: dict[str, str | None] | None = None
     comfyui_base_url: str | None = None
+    comfyui_api_key: str | None = None
+    krea2_mode: Literal["local", "api"] | None = None
     data_dir: str | None = None
     assets_dir: str | None = None
     queue_concurrency: int | None = Field(None, ge=1, le=8)

@@ -31,7 +31,31 @@ def _sanitize_input_overrides(extra: dict[str, Any] | None) -> dict[str, Any] | 
     return cleaned or None
 
 
-def _get_enabled_workflow(kind: str = "image", workflow_id: int | None = None) -> dict[str, Any] | None:
+def _prompt_with_saved_negative(
+    workflow: dict[str, Any] | None,
+    prompt: str,
+    negative_prompt: str | None,
+) -> str:
+    """Keep Turbo CFG=1 stable while still honoring saved exclusions."""
+    negative = (negative_prompt or "").strip()
+    workflow_name = (
+        workflow.get("name", "").lower().replace("_", " ").replace("-", " ")
+        if workflow
+        else ""
+    )
+    if "local fp8" in workflow_name and negative:
+        weighted = ", ".join(
+            f"({part.strip()}:-1.0)"
+            for part in negative.replace(";", ",").split(",")
+            if part.strip()
+        )
+        return f"{prompt}\n\n{weighted}"
+    return prompt
+
+
+def _get_enabled_workflow(
+    kind: str = "image", workflow_id: int | None = None
+) -> dict[str, Any] | None:
     conn = get_db(settings.db_path)
     try:
         if workflow_id:
@@ -39,13 +63,40 @@ def _get_enabled_workflow(kind: str = "image", workflow_id: int | None = None) -
                 "SELECT * FROM workflows WHERE id = ? AND is_enabled = 1", (workflow_id,)
             ).fetchone()
         else:
-            row = conn.execute(
-                "SELECT * FROM workflows WHERE kind = ? AND is_enabled = 1 ORDER BY id ASC LIMIT 1",
+            rows = conn.execute(
+                "SELECT * FROM workflows WHERE kind = ? AND is_enabled = 1 ORDER BY id ASC",
                 (kind,),
-            ).fetchone()
+            ).fetchall()
+            if kind == "image":
+                mode = settings.krea2_mode
+                mode_rows = [
+                    candidate
+                    for candidate in rows
+                    if _workflow_matches_krea_mode(candidate["name"], mode)
+                ]
+                generic_rows = [
+                    candidate
+                    for candidate in rows
+                    if not _workflow_has_explicit_krea_mode(candidate["name"])
+                ]
+                row = mode_rows[0] if mode_rows else (generic_rows[0] if generic_rows else None)
+            else:
+                row = rows[0] if rows else None
         return row_to_dict(row) if row else None
     finally:
         conn.close()
+
+
+def _workflow_matches_krea_mode(name: str, mode: str) -> bool:
+    tokens = name.lower().replace("_", " ").replace("-", " ").split()
+    if mode == "local":
+        return "local" in tokens and "fp8" in tokens
+    return "local" not in tokens and "api" in tokens
+
+
+def _workflow_has_explicit_krea_mode(name: str) -> bool:
+    tokens = name.lower().replace("_", " ").replace("-", " ").split()
+    return "local" in tokens or "api" in tokens
 
 
 async def enqueue_asset_jobs(
@@ -59,10 +110,15 @@ async def enqueue_asset_jobs(
     input_values_override: dict[str, Any] | None = None,
     asset_target: str = "sheet",
     prompt_override: str | None = None,
+    random_seed: bool = True,
+    random_seed_by_asset: dict[str, bool] | None = None,
 ) -> list[dict[str, Any]]:
     await event_bus.publish(
         "agent.thinking",
-        {"message": "Preparing asset generation from saved image prompts…", "project_id": project_id},
+        {
+            "message": "Preparing asset generation from saved image prompts…",
+            "project_id": project_id,
+        },
     )
     workflow = _get_enabled_workflow("image", workflow_id)
     workflow_json = json.loads(workflow["workflow_json"]) if workflow else {}
@@ -71,6 +127,11 @@ async def enqueue_asset_jobs(
     input_values_override = _sanitize_input_overrides(input_values_override)
     has_override = bool(input_values_override)
     allow_empty_prompt = has_override or not _has_text_inputs(inputs)
+
+    def seed_for(kind: str, asset_id: int) -> bool:
+        if random_seed_by_asset is None:
+            return random_seed
+        return bool(random_seed_by_asset.get(f"{kind}:{asset_id}", random_seed))
 
     conn = get_db(settings.db_path)
     jobs: list[dict[str, Any]] = []
@@ -93,13 +154,16 @@ async def enqueue_asset_jobs(
             existing = c.get("sheet_path") if target == "sheet" else c.get("portrait_path")
             if missing_only and existing:
                 continue
+            saved_negative = c.get("negative_prompt")
             prompt = (prompt_override or "").strip() or character_image_prompt(c, kind=target)
+            prompt = _prompt_with_saved_negative(workflow, prompt, saved_negative)
             if not prompt.strip() and not allow_empty_prompt:
                 skipped.append(c.get("name") or str(c["id"]))
                 continue
             values = smart_fill_inputs(
                 inputs,
                 prompt=prompt or None,
+                negative_prompt=saved_negative,
                 extra=input_values_override,
             )
             job = queue_manager.enqueue(
@@ -110,6 +174,7 @@ async def enqueue_asset_jobs(
                     "input_values": values,
                     "character_id": c["id"],
                     "asset_target": target,
+                    "random_seed": seed_for("character", c["id"]),
                     "prompt": prompt,
                 },
             )
@@ -135,13 +200,16 @@ async def enqueue_asset_jobs(
                     continue
                 if missing_only and loc.get("reference_image_path"):
                     continue
+                saved_negative = loc.get("negative_prompt")
                 prompt = (prompt_override or "").strip() or location_image_prompt(loc)
+                prompt = _prompt_with_saved_negative(workflow, prompt, saved_negative)
                 if not prompt.strip() and not allow_empty_prompt:
                     skipped.append(loc.get("name") or str(loc["id"]))
                     continue
                 values = smart_fill_inputs(
                     inputs,
                     prompt=prompt or None,
+                    negative_prompt=saved_negative,
                     extra=input_values_override,
                 )
                 job = queue_manager.enqueue(
@@ -151,6 +219,7 @@ async def enqueue_asset_jobs(
                     payload={
                         "input_values": values,
                         "location_id": loc["id"],
+                        "random_seed": seed_for("location", loc["id"]),
                         "prompt": prompt,
                     },
                 )
@@ -176,13 +245,16 @@ async def enqueue_asset_jobs(
                     continue
                 if missing_only and item.get("reference_image_path"):
                     continue
+                saved_negative = item.get("negative_prompt")
                 prompt = (prompt_override or "").strip() or item_image_prompt(item)
+                prompt = _prompt_with_saved_negative(workflow, prompt, saved_negative)
                 if not prompt.strip() and not allow_empty_prompt:
                     skipped.append(item.get("name") or str(item["id"]))
                     continue
                 values = smart_fill_inputs(
                     inputs,
                     prompt=prompt or None,
+                    negative_prompt=saved_negative,
                     extra=input_values_override,
                 )
                 job = queue_manager.enqueue(
@@ -192,6 +264,7 @@ async def enqueue_asset_jobs(
                     payload={
                         "input_values": values,
                         "item_id": item["id"],
+                        "random_seed": seed_for("item", item["id"]),
                         "prompt": prompt,
                     },
                 )

@@ -108,12 +108,35 @@ class QueueManager:
             row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
             if not row:
                 return None
+            if row["status"] != "failed":
+                return row_to_dict(row)
+            workflow_id = row["workflow_id"]
+            replacement_workflow = False
+            if workflow_id and not conn.execute(
+                "SELECT 1 FROM workflows WHERE id = ? AND is_enabled = 1", (workflow_id,)
+            ).fetchone():
+                workflow_id = None
+            if not workflow_id:
+                replacement = conn.execute(
+                    "SELECT id FROM workflows WHERE kind = ? AND is_enabled = 1 "
+                    "ORDER BY id ASC LIMIT 1",
+                    (row["kind"],),
+                ).fetchone()
+                workflow_id = replacement["id"] if replacement else None
+                replacement_workflow = workflow_id is not None
+            elif workflow_id != row["workflow_id"]:
+                replacement_workflow = True
+            payload_json = row["payload_json"]
+            if replacement_workflow:
+                payload = json.loads(payload_json or "{}")
+                payload["input_values"] = {}
+                payload_json = json.dumps(payload)
             conn.execute(
                 """
                 UPDATE jobs SET status = 'pending', error = NULL, started_at = NULL,
-                completed_at = NULL WHERE id = ?
+                completed_at = NULL, workflow_id = ?, payload_json = ? WHERE id = ?
                 """,
-                (job_id,),
+                (workflow_id, payload_json, job_id),
             )
             conn.commit()
             return row_to_dict(

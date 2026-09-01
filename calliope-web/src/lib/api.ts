@@ -48,6 +48,7 @@ export interface Character {
 	portrait_path: string | null;
 	sheet_path: string | null;
 	consistency_prompt: string | null;
+	negative_prompt: string | null;
 }
 
 export interface Location {
@@ -56,6 +57,7 @@ export interface Location {
 	description: string | null;
 	reference_image_path: string | null;
 	consistency_prompt: string | null;
+	negative_prompt: string | null;
 }
 
 export interface Item {
@@ -64,6 +66,7 @@ export interface Item {
 	description: string | null;
 	reference_image_path: string | null;
 	consistency_prompt: string | null;
+	negative_prompt: string | null;
 }
 
 export interface StoryData {
@@ -94,6 +97,8 @@ export interface Settings {
 	llm_profiles: LlmProfile[];
 	llm_active_id: string | null;
 	comfyui_base_url: string;
+	comfyui_api_key: boolean;
+	krea2_mode: 'local' | 'api';
 	queue_concurrency: number;
 	queue_poll_interval_sec: number;
 	queue_poll_timeout_sec: number;
@@ -153,6 +158,11 @@ export const projects = {
 		api<Project>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
 	delete: (id: number) => api<{ ok: boolean }>(`/api/projects/${id}`, { method: 'DELETE' }),
 	getStory: (id: number) => api<StoryData>(`/api/projects/${id}/story`),
+	generateScript: (id: number, payload: { replace?: boolean; scene_count?: number } = {}) =>
+		api<{ ok: boolean; scenes: Scene[] }>(`/api/projects/${id}/generate-script`, {
+			method: 'POST',
+			body: JSON.stringify(payload),
+		}),
 	updateBeat: (projectId: number, beatId: number, payload: Partial<Beat>) =>
 		api<Beat>(`/api/projects/${projectId}/beats/${beatId}`, {
 			method: 'PATCH',
@@ -217,6 +227,8 @@ export const projects = {
 			input_values?: Record<string, unknown>;
 			asset_target?: 'sheet';
 			prompt?: string;
+			random_seed?: boolean;
+			random_seed_by_asset?: Record<string, boolean>;
 		} = {},
 	) =>
 		api<{ ok: boolean; jobs: Job[] }>(`/api/projects/${id}/generate-assets`, {

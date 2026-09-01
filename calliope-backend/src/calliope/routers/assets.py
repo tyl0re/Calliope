@@ -62,6 +62,8 @@ async def generate_assets(project_id: int, payload: GenerateAssetsRequest) -> di
         input_values_override=payload.input_values,
         asset_target=payload.asset_target or "sheet",
         prompt_override=payload.prompt,
+        random_seed=payload.random_seed,
+        random_seed_by_asset=payload.random_seed_by_asset,
     )
     return {"ok": True, "jobs": jobs}
 

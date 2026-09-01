@@ -8,6 +8,8 @@
   "llm_model": "Qwen3.8-27B",
   "llm_api_key": "",
   "comfyui_base_url": "http://127.0.0.1:8188",
+  "comfyui_api_key": "",
+  "krea2_mode": "local",
   "queue_concurrency": 1,
   "queue_poll_interval_sec": 2.0,
   "queue_poll_timeout_sec": 1800,

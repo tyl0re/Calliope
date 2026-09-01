@@ -1,6 +1,6 @@
 # Calliope
 
-Calliope is a local-first story-to-video studio. You type a story idea; Calliope drafts a storyline with beats, characters, and locations, writes a per-scene script, then generates a video clip per scene by driving your own ComfyUI install. When the clips are done, one click stitches them into a finished film with crossfades and matched loudness (ffmpeg). Everything runs on your machine: projects live in SQLite, media lives in folders, and no cloud service is involved beyond the LLM endpoint you point it at.
+Calliope is a local-first story-to-video studio. You type a story idea; Calliope drafts a storyline with beats, characters, and locations, writes a per-scene script, then generates a video clip per scene by driving your own ComfyUI install. When the clips are done, one click stitches them into a finished film with crossfades and matched loudness (ffmpeg). Projects and media stay on your machine; generation can use either local ComfyUI workflows or explicitly selected third-party API nodes, and the LLM endpoint is configurable.
 
 
 <img width="1672" height="1015" alt="Screenshot 2026-08-21 033244" src="https://github.com/user-attachments/assets/57bc3d05-f33e-415c-9ce9-e7d796e3bcdd" />
@@ -17,22 +17,37 @@ Calliope is a local-first story-to-video studio. You type a story idea; Calliope
 
 - Python 3.11+
 - Node.js 18+ (npm)
+- Git (for the optional ComfyUI node installer)
 - A running ComfyUI install, with the models your workflows need already set up
 - An OpenAI-compatible LLM endpoint — local (LM Studio, Ollama, etc.) or hosted
 - ffmpeg on PATH — needed for film export
 
 **1. Backend (FastAPI)**
 
-```bash
+PowerShell:
+
+```powershell
 cd calliope-backend
 python -m venv .venv
 .venv\Scripts\pip install -e ".[dev]"
 .venv\Scripts\python -m calliope.main --host 127.0.0.1 --port 8247
 ```
 
+Linux/macOS:
+
+```bash
+cd calliope-backend
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[dev]'
+python -m calliope.main --host 127.0.0.1 --port 8247
+```
+
 Optionally copy `calliope_config.example.json` to `calliope_config.json` and edit it before starting (LLM endpoint, ComfyUI URL). You can also configure everything later in the app's **Settings** page. Never commit `calliope_config.json` — it stores your API key.
 
 **2. Frontend (SvelteKit)**
+
+In a second terminal, start the frontend:
 
 ```bash
 cd calliope-web
@@ -47,8 +62,18 @@ Open `http://127.0.0.1:5173`. The dev server proxies `/api` to the backend on `1
 Open the app, go to **Settings**, and set:
 
 1. **LLM** — one or more OpenAI-compatible endpoints (base URL, model name, API key). Save several, then pick which one is **Active**.
-2. **ComfyUI** — the base URL of your running ComfyUI (e.g. `http://127.0.0.1:8188`)
+2. **ComfyUI** — the base URL of your running ComfyUI (e.g. `http://127.0.0.1:8188`). API workflows using partner nodes also need the ComfyUI API key in **Settings → ComfyUI**.
 3. **Agent** *(optional)* — assign a specific LLM per agent role (see below)
+
+For Krea 2 assets, choose **Local FP8 + LoRA** or **Krea API** under **Settings → ComfyUI**. Local mode keeps generation on the configured ComfyUI machine; API mode sends the prompt to the selected partner node and may incur account limits or charges.
+
+For the local Krea-2 workflows, install the documented custom node bundle first:
+
+```bash
+python scripts/install_comfy_nodes.py --comfyui /path/to/ComfyUI
+```
+
+See [docs/COMFYUI_NODES.md](docs/COMFYUI_NODES.md) for node requirements, workflow wiring, and cross-platform setup notes.
 
 Leave **Dry-run** off — it is meant for testing and produces placeholder results instead of real generations.
 
@@ -74,7 +99,7 @@ The app walks a project through four stages — **Story, Assets, Script, Video**
 
 - **Story:** describe your idea and **Draft Storyline** — this opens a project-linked chat in the Agents view with the prompt pre-filled, and the agent writes beats, characters, locations, and misc. items. Edit anything by hand before moving on.
 - **Assets:** each character, location, and item has its own **Image prompt**. Pick a workflow and shared settings (width/height/etc.) at the top, then click Generate per entity to produce reference images on your ComfyUI. Regenerate any single entity without touching the others.
-- **Script:** **Regenerate Script** also opens a project-linked Agents chat (pre-filled) to rewrite the per-scene script. Scenes link back to the characters and locations from the Story stage.
+- **Script:** **Regenerate Script** confirms and replaces the current scene list through the project endpoint. The scene count is derived from the project's target duration. Scenes link back to the characters and locations from the Story stage.
 - **Video:** each scene gets a **Generate** button that queues a clip job on ComfyUI with the right prompt and reference images (plus optional video/audio file refs). Scenes marked **Continue from previous video** in Script extend the previous clip instead of cutting fresh — see [Continue from previous clip (video extend)](#continue-from-previous-clip-video-extend).
 - **Film view:** once scenes have clips, **Export film** stitches them with ffmpeg: clips are normalized to 1080p at the **majority frame rate of the clips themselves** (24 fps clips export at 24 fps; mixed-rate projects conform to whichever rate most clips use), joined with 0.5s crossfades, and loudness-normalized into one final file.
 - When everything is done the project is automatically marked **Completed**.

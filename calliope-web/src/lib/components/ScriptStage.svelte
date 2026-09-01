@@ -5,7 +5,6 @@
 	import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { assetUrl, jobsApi, projects, type Job, type Scene } from '$lib/api';
 	import { estimateTargetSeconds } from '$lib/durationBudget';
-	import { agentDeepLink } from '$lib/agentTasks';
 	import { toast } from '$lib/toast';
 	import Button from '$lib/components/ui/Button.svelte';
 	import StatusChip from '$lib/components/ui/StatusChip.svelte';
@@ -68,7 +67,19 @@
 		return target ? estimateTargetSeconds(target) : 0;
 	});
 
-	const busy = $derived(adding || deletingId != null);
+	const regenerateMutation = createMutation({
+		mutationFn: () => projects.generateScript(projectId, { replace: true }),
+		onSuccess: async (result) => {
+			await client.invalidateQueries({ queryKey: ['scenes'] });
+			await client.invalidateQueries({ queryKey: ['story'] });
+			toast.success(`Script regenerated — ${result.scenes.length} scenes`);
+		},
+		onError: (err) => {
+			toast.error(err instanceof Error ? err.message : 'Could not regenerate script');
+		},
+	});
+
+	const busy = $derived(adding || deletingId != null || $regenerateMutation.isPending);
 
 	const saveMutation = createMutation({
 		mutationFn: () =>
@@ -171,10 +182,20 @@
 		client.invalidateQueries({ queryKey: ['scenes'] });
 	}
 
-	/** Hand off script regeneration to a fresh, project-linked agent chat. */
 	function requestRegenerate() {
 		if (busy) return;
-		goto(agentDeepLink(projectId, 'script'));
+		if (
+			!window.confirm(
+				'Regenerate the complete script? This replaces the current scene list after the new script is ready.',
+			)
+		) {
+			return;
+		}
+		$regenerateMutation.mutate();
+	}
+
+	function goToVideo() {
+		goto('?stage=video', { keepFocus: true, noScroll: true });
 	}
 
 	function openEdit(scene: Scene) {
@@ -269,8 +290,11 @@
 		<Button variant="secondary" disabled={busy} loading={adding} onclick={addScene}>
 			<Icon name="plus" size={14} /> Add Scene
 		</Button>
-		<Button variant="primary" disabled={busy} onclick={requestRegenerate}>
+		<Button variant="primary" disabled={busy} loading={$regenerateMutation.isPending} onclick={requestRegenerate}>
 			<Icon name="sparkle" size={15} /> Regenerate Script
+		</Button>
+		<Button variant="primary" disabled={busy} onclick={goToVideo}>
+			Continue to Video <Icon name="chevron-right" size={15} />
 		</Button>
 	</div>
 </header>
