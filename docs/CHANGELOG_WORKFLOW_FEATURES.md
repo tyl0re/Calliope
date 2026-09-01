@@ -24,6 +24,10 @@ Settings expose a persisted Krea 2 generation mode. Asset workflow selection fol
 
 Assets now link forward to Script, and Script links forward to Video. Regenerating a script calls the project endpoint directly, confirms before replacing the scene list, and uses the project's target duration to determine the scene count. Script generation has no random seed; variability comes from the configured LLM sampling settings.
 
+## Post-Render Video Prompt Editing
+
+The Video stage keeps the prompt and input payload for each render job. After a clip has been rendered, contributors can open **View prompt & inputs**, select a job from the scene history, choose **Edit prompt**, and regenerate with a revised prompt. Saving the revised prompt updates the scene draft so future generations reuse it. The separate **Regenerate** action forces a fresh LLM rewrite instead of returning the existing draft.
+
 ## Video Workflow Defaults
 
 Video selection no longer falls back to the newest workflow by list order. It uses the lowest enabled workflow ID when a scene has no stored selection, preventing specialized image-to-video or continuation workflows from becoming accidental defaults. Missing optional `SolAttnPatch` nodes were removed from affected workflows because the indexed package is AMD ROCm/Linux-specific and is not suitable as a Windows/NVIDIA dependency.
