@@ -65,6 +65,8 @@
 	onClipSourceUpload?: () => void;
 	/** HITL prompt review before Generate: caller resolves + shows the modal. */
 	onPreviewPrompt?: () => void;
+	/** Open an already-rendered prompt for editing and regeneration. */
+	onEditPrompt?: (prompt: string) => void;
 	generateLabel?: string;
 		chained?: (scene: Scene) => boolean;
 		submitting?: boolean;
@@ -100,6 +102,7 @@
 		onClipSourceChange,
 		onClipSourceUpload,
 		onPreviewPrompt,
+		onEditPrompt,
 		generateLabel = 'Generate clip',
 		chained = () => false,
 		submitting = false,
@@ -222,6 +225,7 @@
 				{job}
 				jobs={sceneJobs}
 				{workflow}
+				onEditPrompt={onEditPrompt}
 				onCopySettings={(values) => {
 					formValues = { ...formValues, ...values };
 					onFormChange?.({ ...formValues });

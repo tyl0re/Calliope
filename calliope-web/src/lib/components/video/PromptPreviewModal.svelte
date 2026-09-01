@@ -4,7 +4,7 @@
 	 * Resolves the exact prompt (saved fresh draft → LLM rewrite → fallback),
 	 * lets the user edit/regenerate/save it, and only enqueues on confirm.
 	 */
-	import { createMutation } from '@tanstack/svelte-query';
+	import { createMutation, useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from '$lib/toast';
 	import { jobsApi, projects, type Scene, type Workflow } from '$lib/api';
 	import Button from '$lib/components/ui/Button.svelte';
@@ -21,6 +21,9 @@
 		inputValues?: Record<string, string | number>;
 		/** Fallback enqueue path when the modal confirms. */
 		onConfirm: (prompt: string) => void;
+		/** Existing queued prompt to edit instead of resolving a new one. */
+		initialPrompt?: string | null;
+		editExisting?: boolean;
 		onclose?: () => void;
 	}
 
@@ -31,9 +34,12 @@
 		workflow = null,
 		inputValues = {},
 		onConfirm,
+		initialPrompt = null,
+		editExisting = false,
 		onclose,
 	}: Props = $props();
 
+	const client = useQueryClient();
 	let text = $state('');
 	let basedOn = $state('');
 	let fromDraft = $state(false);
@@ -42,6 +48,7 @@
 	let attemptedFor = $state<number | null>(null);
 	/** Resolve failed — modal shows a client-side prose fallback instead of a dead end. */
 	let failed = $state(false);
+	let loadedInitialPrompt = $state<string | null>(null);
 
 	const preview = createMutation({
 		mutationFn: async () => {
@@ -78,6 +85,16 @@
 	// first was still pending.
 	$effect(() => {
 		if (!open || !scene) return;
+		if (editExisting && initialPrompt && initialPrompt !== loadedInitialPrompt) {
+			text = initialPrompt;
+			basedOn = '';
+			fromDraft = true;
+			failed = false;
+			stale = false;
+			loadedInitialPrompt = initialPrompt;
+			attemptedFor = scene.id;
+			return;
+		}
 		if (attemptedFor === scene.id) return;
 		attemptedFor = scene.id;
 		$preview.mutate();
@@ -99,8 +116,8 @@
 
 	const draftMeta = $derived(scene?.video_settings?.prompt_draft_meta);
 
-	async function saveDraft() {
-		if (!scene || !text.trim()) return;
+	async function saveDraft(showToast = true): Promise<boolean> {
+		if (!scene || !text.trim()) return false;
 		const existing = scene.video_settings ?? {};
 		const next = {
 			...existing,
@@ -109,9 +126,12 @@
 		};
 		try {
 			await projects.updateScene(projectId, scene.id, { video_settings: next });
-			toast.success('Draft saved — Generate will use it');
+			await client.invalidateQueries({ queryKey: ['scenes', projectId] });
+			if (showToast) toast.success('Draft saved — Generate will use it');
+			return true;
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : String(err));
+			return false;
 		}
 	}
 
@@ -120,18 +140,19 @@
 		$preview.mutate();
 	}
 
-	function confirmGenerate() {
+	async function confirmGenerate() {
 		const prompt = text.trim();
 		if (!prompt) {
 			toast.error('Prompt is empty — edit or regenerate before generating');
 			return;
 		}
+		if (editExisting && !(await saveDraft(false))) return;
 		open = false;
 		onConfirm(prompt);
 	}
 </script>
 
-<Modal bind:open {onclose} title="Review prompt before generating" size="lg">
+<Modal bind:open {onclose} title={editExisting ? 'Edit video prompt' : 'Review prompt before generating'} size="lg">
 	{#if !scene}
 		<p class="muted">No scene selected.</p>
 	{:else if $preview.isPending}
@@ -176,7 +197,7 @@
 
 	{#snippet footer()}
 		<Button variant="ghost" onclick={() => (open = false)}>Cancel</Button>
-		<Button variant="secondary" disabled={$preview.isPending || !text} onclick={saveDraft}>
+		<Button variant="secondary" disabled={$preview.isPending || !text} onclick={() => saveDraft()}>
 			Save draft
 		</Button>
 		<Button variant="secondary" disabled={$preview.isPending} onclick={regenerate}>

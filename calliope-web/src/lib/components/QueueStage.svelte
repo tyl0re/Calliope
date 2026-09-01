@@ -306,14 +306,22 @@
 
 	// --- HITL review gate (issue #27) ---
 	let previewOpen = $state(false);
+	let editingPrompt = $state<string | null>(null);
 
 	function beginGenerate() {
 		if (!selected) return;
+		editingPrompt = null;
+		previewOpen = true;
+	}
+
+	function beginEditPrompt(prompt: string) {
+		editingPrompt = prompt;
 		previewOpen = true;
 	}
 
 	function onGenerateConfirmed(prompt: string) {
 		if (!selected) return;
+		editingPrompt = null;
 		$generateOne.mutate({ sceneId: selected.id, prompt });
 	}
 
@@ -745,6 +753,7 @@
 			}}
 		onGenerate={() => $generateOne.mutate({ sceneId: selected.id })}
 		onPreviewPrompt={beginGenerate}
+		onEditPrompt={beginEditPrompt}
 	/>
 
 	<PromptPreviewModal
@@ -752,6 +761,8 @@
 		{projectId}
 		scene={selected}
 		workflow={selWf}
+		initialPrompt={editingPrompt}
+		editExisting={editingPrompt !== null}
 		inputValues={formValues}
 		onConfirm={onGenerateConfirmed}
 	/>

@@ -21,6 +21,8 @@
 		workflow?: Workflow | null;
 		/** Load a job's input_values back into the video form. */
 		onCopySettings?: (values: Record<string, string | number>) => void;
+		/** Open the selected job prompt in the editable preview modal. */
+		onEditPrompt?: (prompt: string) => void;
 		onclose?: () => void;
 	}
 
@@ -30,6 +32,7 @@
 		jobs = [],
 		workflow = null,
 		onCopySettings,
+		onEditPrompt,
 		onclose,
 	}: Props = $props();
 
@@ -174,6 +177,11 @@
 				<span class="job-meta">{new Date(activeJob.completed_at).toLocaleString()}</span>
 			{/if}
 			<span class="job-head-actions">
+				{#if onEditPrompt && prompt}
+					<Button size="sm" variant="secondary" onclick={() => onEditPrompt?.(prompt)}>
+						<Icon name="edit" size={14} /> Edit prompt
+					</Button>
+				{/if}
 				{#if onCopySettings && activeJob.payload?.input_values}
 					<Button size="sm" variant="secondary" onclick={copySettings}>
 						<Icon name="upload" size={14} /> Copy settings to form
