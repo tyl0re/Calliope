@@ -226,6 +226,47 @@ def test_preview_prompt_fresh_draft_shortcircuits_llm(client, monkeypatch):
     assert called == []  # LLM never invoked
 
 
+def test_preview_prompt_force_rewrite_bypasses_fresh_draft(client, monkeypatch):
+    """Regenerate asks the LLM again instead of returning the saved draft."""
+    from calliope.agent.video_agent import _scene_prompt_hash, preview_scene_prompt
+    from calliope.db import row_to_dict
+
+    pid = _mk_project(client, "Force preview rewrite")
+    scene = _add_scene(client, pid, 1)
+    conn = get_db(settings.db_path)
+    try:
+        wf_id = _insert_h3_workflow(conn, "H3 force rewrite")
+        conn.execute("UPDATE scenes SET workflow_id = ? WHERE id = ?", (wf_id, scene["id"]))
+        fresh_scene = row_to_dict(
+            conn.execute("SELECT * FROM scenes WHERE id = ?", (scene["id"],)).fetchone()
+        )
+        fresh_scene["character_ids"] = []
+        conn.execute(
+            "UPDATE scenes SET video_settings_json = ? WHERE id = ?",
+            (
+                json.dumps(
+                    {
+                        "prompt_draft": "OLD DRAFT",
+                        "prompt_draft_meta": {"based_on": _scene_prompt_hash(fresh_scene)},
+                    }
+                ),
+                scene["id"],
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    async def fake_rewrite(scene_, subjects, **kwargs):
+        return "NEW REWRITE"
+
+    monkeypatch.setattr("calliope.agent.video_agent._h3_rewrite", fake_rewrite)
+    result = asyncio_run(preview_scene_prompt(pid, scene["id"], force_rewrite=True))
+
+    assert result["prompt"] == "NEW REWRITE"
+    assert result["from_draft"] is False
+
+
 def test_preview_prompt_dead_llm_returns_deterministic_fallback(client, monkeypatch):
     """A failing LLM rewrite falls back to minimax_h3_ref_fallback — never 500s.
 
@@ -323,7 +364,8 @@ def test_preview_prompt_prose_profile(client):
         }
         cur = conn.execute(
             """
-            INSERT INTO workflows (name, kind, workflow_json, input_schema, output_schema, is_enabled)
+            INSERT INTO workflows
+            (name, kind, workflow_json, input_schema, output_schema, is_enabled)
             VALUES (?, 'video', ?, '[]', '[]', 1)
             """,
             ("Prose WF", json.dumps(wf)),

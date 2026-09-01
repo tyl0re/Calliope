@@ -213,3 +213,4 @@ class GenerateVideosRequest(BaseModel):
 class PreviewPromptRequest(BaseModel):
     scene_id: int
     workflow_id: int | None = None
+    force_rewrite: bool = False

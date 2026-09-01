@@ -144,7 +144,8 @@ def _get_workflow(workflow_id: int | None = None) -> dict[str, Any] | None:
             ).fetchone()
         else:
             row = conn.execute(
-                "SELECT * FROM workflows WHERE kind = 'video' AND is_enabled = 1 ORDER BY id ASC LIMIT 1"
+                "SELECT * FROM workflows WHERE kind = 'video' AND is_enabled = 1 "
+                "ORDER BY id ASC LIMIT 1"
             ).fetchone()
             if not row:
                 row = conn.execute(
@@ -194,6 +195,7 @@ async def preview_scene_prompt(
     project_id: int,
     scene_id: int,
     workflow_id: int | None = None,
+    force_rewrite: bool = False,
 ) -> dict[str, Any]:
     """Resolve the exact prompt a Generate would send — without enqueueing.
 
@@ -244,7 +246,7 @@ async def preview_scene_prompt(
     if profile == "minimax_h3_ref":
         # Fresh saved draft short-circuits the LLM call
         draft = _stored_prompt_draft(scene)
-        if draft:
+        if draft and not force_rewrite:
             meta = _scene_video_settings(scene).get("prompt_draft_meta") or {}
             if meta.get("based_on") == based_on:
                 return {
@@ -256,13 +258,38 @@ async def preview_scene_prompt(
         subjects, _ = _h3_subjects(characters, loc_row, loc_image, inputs)
         await event_bus.publish(
             "agent.thinking",
-            {"message": f"H3 prompt rewrite · scene {scene.get('order_index')}", "project_id": project_id},
+            {
+                "message": f"H3 prompt rewrite · scene {scene.get('order_index')}",
+                "project_id": project_id,
+            },
         )
         # Preview is interactive — fail fast to the deterministic template
         # instead of making the user wait out a dead endpoint.
         prompt = await _h3_rewrite(scene, subjects, timeout=30.0)
     else:
         prompt = scene_video_prompt(scene, characters)
+        if force_rewrite:
+            client = LLMClient.for_role("video", timeout=45.0)
+            try:
+                rewritten = await client.chat(
+                    [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Rewrite the supplied scene description as one concise, "
+                                "production-ready cinematic video prompt. Preserve the scene "
+                                "facts and return only the prompt text."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.8,
+                )
+                prompt = rewritten.strip() or prompt
+            except Exception:
+                logger.exception("Prose video prompt rewrite failed; using deterministic prompt")
+            finally:
+                await client.close()
     return {"prompt": prompt, "profile": profile, "from_draft": False, "based_on": based_on}
 
 
@@ -326,7 +353,11 @@ async def enqueue_video_jobs(
             ).fetchall()
             characters = [row_to_dict(r) for r in char_rows]
             char_image = next(
-                (c.get("sheet_path") or c.get("portrait_path") for c in characters if c.get("sheet_path") or c.get("portrait_path")),
+                (
+                    c.get("sheet_path") or c.get("portrait_path")
+                    for c in characters
+                    if c.get("sheet_path") or c.get("portrait_path")
+                ),
                 None,
             )
             loc_image = scene.get("env_image_path")

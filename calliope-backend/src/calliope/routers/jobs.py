@@ -79,7 +79,10 @@ async def preview_prompt(project_id: int, payload: PreviewPromptRequest) -> dict
     """HITL review step: the exact prompt a Generate would send, no enqueue."""
     try:
         return await preview_scene_prompt(
-            project_id, payload.scene_id, workflow_id=payload.workflow_id
+            project_id,
+            payload.scene_id,
+            workflow_id=payload.workflow_id,
+            force_rewrite=payload.force_rewrite,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

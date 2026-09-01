@@ -49,6 +49,7 @@
 	/** Resolve failed — modal shows a client-side prose fallback instead of a dead end. */
 	let failed = $state(false);
 	let loadedInitialPrompt = $state<string | null>(null);
+	let forceRewrite = $state(false);
 
 	const preview = createMutation({
 		mutationFn: async () => {
@@ -56,6 +57,7 @@
 			return jobsApi.previewPrompt(projectId, {
 				scene_id: scene.id,
 				workflow_id: workflow?.id,
+				force_rewrite: forceRewrite,
 			});
 		},
 		onSuccess: (data) => {
@@ -92,11 +94,13 @@
 			failed = false;
 			stale = false;
 			loadedInitialPrompt = initialPrompt;
+			forceRewrite = false;
 			attemptedFor = scene.id;
 			return;
 		}
 		if (attemptedFor === scene.id) return;
 		attemptedFor = scene.id;
+		forceRewrite = false;
 		$preview.mutate();
 	});
 
@@ -137,6 +141,7 @@
 
 	function regenerate() {
 		failed = false;
+		forceRewrite = true;
 		$preview.mutate();
 	}
 

@@ -302,7 +302,7 @@ export const jobsApi = {
 		}),
 	previewPrompt: (
 		projectId: number,
-		payload: { scene_id: number; workflow_id?: number },
+		payload: { scene_id: number; workflow_id?: number; force_rewrite?: boolean },
 	) =>
 		api<{
 			prompt: string;
