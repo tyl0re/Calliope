@@ -80,7 +80,13 @@
 		const list = modeWorkflows;
 		if (list.length === 0) return;
 		if (workflowId === '' || !list.some((w) => w.id === workflowId)) {
-			workflowId = list[0].id;
+			const promptOnly = list.find(
+				(workflow) =>
+					!workflow.input_schema.some((input) =>
+						['image', 'video'].includes(input.role ?? ''),
+					),
+			);
+			workflowId = promptOnly?.id ?? list[0].id;
 		}
 	});
 
