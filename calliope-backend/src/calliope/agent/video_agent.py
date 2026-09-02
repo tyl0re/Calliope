@@ -449,8 +449,19 @@ async def enqueue_video_jobs(
                 **stored_values,
                 **{k: v for k, v in (input_values_override or {}).items() if v not in (None, "")},
             }
+            reference_node_ids = {
+                str(input_item["nodeId"])
+                for input_item in inputs
+                if input_item.get("role") in {"image", "video", "audio"}
+            }
             for k, v in explicit_final.items():
                 if v not in (None, ""):
+                    if (
+                        str(k) in reference_node_ids
+                        and isinstance(v, str)
+                        and not Path(v).exists()
+                    ):
+                        continue
                     values[str(k)] = v
             payload: dict[str, Any] = {"input_values": values, "prompt": prompt}
             if scene.get("chain_from_prev"):
