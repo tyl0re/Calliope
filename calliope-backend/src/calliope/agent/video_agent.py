@@ -396,6 +396,12 @@ async def enqueue_video_jobs(
                 )
             if profile == "minimax_h3_ref":
                 subjects, ref_paths = _h3_subjects(characters, loc_row, loc_image, inputs)
+                required_refs = sum(1 for item in inputs if item.get("role") == "image")
+                if len(ref_paths) < required_refs:
+                    raise ValueError(
+                        f"{workflow.get('name', 'Video workflow')} requires {required_refs} "
+                        f"image references, but this scene has {len(ref_paths)}."
+                    )
                 # Prompt precedence: explicit request → saved (fresh) draft → LLM.
                 explicit_prompt = (prompts or {}).get(scene["id"])
                 fresh_draft = None
@@ -405,7 +411,7 @@ async def enqueue_video_jobs(
                         meta = _scene_video_settings(scene).get("prompt_draft_meta") or {}
                         if (
                             meta.get("based_on") == _scene_prompt_hash(scene)
-                            and meta.get("workflow_id") == workflow_id
+                            and meta.get("workflow_id") == wf_id
                         ):
                             fresh_draft = candidate
                 if explicit_prompt is not None:
@@ -440,7 +446,7 @@ async def enqueue_video_jobs(
                     duration=duration,
                     extra=extra_values,
                 )
-            _save_prompt_draft(conn, scene, workflow_id, prompt)
+            _save_prompt_draft(conn, scene, wf_id, prompt)
             conn.commit()
             # Stored per-scene setups override smart-fill's context choices
             # (e.g. an edited duration). smart_fill skips duration-role nodes
