@@ -71,10 +71,15 @@ def recommend_beat_count(target_duration: str | None) -> int:
     return max(4, min(60, round(secs / 12)))
 
 
-def recommend_scene_count(target_duration: str | None, target_scene_duration_sec: int = 10) -> int:
-    """Video scenes based on the configured average editorial shot duration."""
+def recommend_scene_count(
+    target_duration: str | None,
+    min_scene_duration_sec: int = 4,
+    max_scene_duration_sec: int = 30,
+) -> int:
+    """Video scenes based on the midpoint of the configured duration range."""
     secs = estimate_target_seconds(target_duration)
-    return max(4, min(90, round(secs / max(4, target_scene_duration_sec))))
+    midpoint = max(1, (min_scene_duration_sec + max_scene_duration_sec) / 2)
+    return max(4, min(90, round(secs / midpoint)))
 
 
 def story_generation_user_prompt(
@@ -166,10 +171,11 @@ def build_script_messages(
     scene_count: int | None = None,
     min_scene_duration_sec: int = 4,
     max_scene_duration_sec: int = 15,
-    target_scene_duration_sec: int = 10,
 ) -> list[dict[str, str]]:
     secs = estimate_target_seconds(target_duration)
-    recommended = recommend_scene_count(target_duration, target_scene_duration_sec)
+    recommended = recommend_scene_count(
+        target_duration, min_scene_duration_sec, max_scene_duration_sec
+    )
     # Honor an explicit / existing count (e.g. user added empty scenes before regenerate)
     scene_n = max(recommended, int(scene_count)) if scene_count and scene_count > 0 else recommended
     # Stretch runtime floor when the user asked for more clips than duration alone implies
@@ -208,7 +214,7 @@ Locations:
 3. Do NOT collapse back to fewer scenes. The user expanded the script to {scene_n} clips — fill all of them.
 4. Sum of duration_sec across all scenes should be approximately {secs} (within ±15%).
 5. duration_sec is an editorial recommendation, not a constant: vary it intentionally between {min_scene_duration_sec} and {max_scene_duration_sec} seconds based on action complexity, dialogue, reveals, reaction beats, and transitions.
-6. Prefer ordinary scenes near {target_scene_duration_sec}s, but give visually important reveals or sustained actions more time. Spread the beat arc across all {scene_n} scenes.
+6. Do not force a single average duration. Use the full range deliberately: short transitions can be near the minimum, ordinary beats can be in the middle, and major reveals, dialogue, or sustained actions may use the upper range. Spread the beat arc across all {scene_n} scenes.
 
 === ACTION DETAIL (this text IS the video prompt — users copy it straight into the generator) ===
 Each scene's "action" is fed verbatim to an AI video generator. Write 4–6 vivid present-tense

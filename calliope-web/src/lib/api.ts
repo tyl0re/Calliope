@@ -101,7 +101,6 @@ export interface Settings {
 	krea2_mode: 'local' | 'api';
 	script_min_scene_duration_sec: number;
 	script_max_scene_duration_sec: number;
-	script_target_scene_duration_sec: number;
 	queue_concurrency: number;
 	queue_poll_interval_sec: number;
 	queue_poll_timeout_sec: number;

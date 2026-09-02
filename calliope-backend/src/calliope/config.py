@@ -139,7 +139,6 @@ class Settings(BaseSettings):
     agent_max_steps: int = 24
     script_min_scene_duration_sec: int = 4
     script_max_scene_duration_sec: int = 30
-    script_target_scene_duration_sec: int = 10
     agent_hardening_prompt: str = DEFAULT_AGENT_HARDENING_PROMPT
     dry_run: bool = False  # off by default — real ComfyUI jobs
 

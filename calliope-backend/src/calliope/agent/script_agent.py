@@ -144,7 +144,9 @@ async def generate_script(
             (project_id,),
         ).fetchone()["n"]
         recommended = recommend_scene_count(
-            p.get("target_duration"), settings.script_target_scene_duration_sec
+            p.get("target_duration"),
+            settings.script_min_scene_duration_sec,
+            settings.script_max_scene_duration_sec,
         )
         # Prefer explicit request, else keep at least the board the user already built
         requested = (
@@ -171,7 +173,6 @@ async def generate_script(
             scene_count=required_scenes,
             min_scene_duration_sec=settings.script_min_scene_duration_sec,
             max_scene_duration_sec=settings.script_max_scene_duration_sec,
-            target_scene_duration_sec=settings.script_target_scene_duration_sec,
         )
         result = await generate_structured(messages, temperature=0.7)
         scenes_out = result.get("scenes") or []
