@@ -166,6 +166,21 @@ export const projects = {
 			method: 'POST',
 			body: JSON.stringify(payload),
 		}),
+	createCharacter: (projectId: number, payload: Omit<Character, 'id' | 'portrait_path' | 'sheet_path'>) =>
+		api<Character>(`/api/projects/${projectId}/characters`, {
+			method: 'POST',
+			body: JSON.stringify(payload),
+		}),
+	createLocation: (projectId: number, payload: Omit<Location, 'id' | 'reference_image_path'>) =>
+		api<Location>(`/api/projects/${projectId}/locations`, {
+			method: 'POST',
+			body: JSON.stringify(payload),
+		}),
+	createItem: (projectId: number, payload: Omit<Item, 'id' | 'reference_image_path'>) =>
+		api<Item>(`/api/projects/${projectId}/items`, {
+			method: 'POST',
+			body: JSON.stringify(payload),
+		}),
 	updateBeat: (projectId: number, beatId: number, payload: Partial<Beat>) =>
 		api<Beat>(`/api/projects/${projectId}/beats/${beatId}`, {
 			method: 'PATCH',

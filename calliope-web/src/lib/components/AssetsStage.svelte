@@ -23,6 +23,7 @@
 	import ProgressBar from '$lib/components/ui/ProgressBar.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import {
@@ -82,6 +83,14 @@
 	let fileInput: HTMLInputElement | null = $state(null);
 	let uploadTarget = $state<DeleteTarget | null>(null);
 	let uploadingKey = $state<string | null>(null);
+	let createOpen = $state(false);
+	let createKind = $state<'character' | 'location' | 'item'>('character');
+	let createName = $state('');
+	let createDescription = $state('');
+	let createRole = $state('');
+	let createAge = $state('');
+	let createAppearance = $state('');
+	let createPersonality = $state('');
 
 	const assetsQuery = createQuery(
 		toStore(() => ({
@@ -229,8 +238,48 @@
 		if (itemWorkflowId === '') itemWorkflowId = modeWorkflows[0]?.id || first;
 	});
 
+	const createAssetMutation = createMutation<unknown, Error, void>({
+		mutationFn: () => {
+			if (!createName.trim()) throw new Error('Name is required');
+			if (createKind === 'character') {
+				return projects.createCharacter(projectId, {
+					name: createName.trim(), role: createRole.trim() || null, age: createAge.trim() || null,
+					appearance: createAppearance.trim() || null, personality: createPersonality.trim() || null,
+					consistency_prompt: null, negative_prompt: null,
+				});
+			}
+			if (createKind === 'location') {
+				return projects.createLocation(projectId, {
+					name: createName.trim(), description: createDescription.trim() || null,
+					consistency_prompt: null, negative_prompt: null,
+				});
+			}
+			return projects.createItem(projectId, {
+				name: createName.trim(), description: createDescription.trim() || null,
+				consistency_prompt: null, negative_prompt: null,
+			});
+		},
+		onSuccess: async () => {
+			await client.invalidateQueries({ queryKey: ['assets'] });
+			createOpen = false;
+			toast.success('Asset created');
+		},
+		onError: (err) => toast.error(err instanceof Error ? err.message : 'Could not create asset'),
+	});
+
 	function workflowStorageKey(): string {
 		return `calliope:asset-workflows:${projectId}`;
+	}
+
+	function openCreate(kind: 'character' | 'location' | 'item') {
+		createKind = kind;
+		createName = '';
+		createDescription = '';
+		createRole = '';
+		createAge = '';
+		createAppearance = '';
+		createPersonality = '';
+		createOpen = true;
 	}
 
 	function readWorkflowPreferences(): Record<string, unknown> {
@@ -845,6 +894,13 @@
 				· {$assetsQuery.data.items.length}{/if}</button
 		>
 	</div>
+	<Button
+		variant="secondary"
+		size="sm"
+		onclick={() => openCreate(tab === 'characters' ? 'character' : tab === 'locations' ? 'location' : 'item')}
+	>
+		<Icon name="plus" size={14} /> Add {tab === 'characters' ? 'character' : tab === 'locations' ? 'environment' : 'item'}
+	</Button>
 </div>
 
 {#if modeWorkflows.length === 0}
@@ -1649,7 +1705,26 @@
 	oncancel={() => (deleteTarget = null)}
 />
 
+<Modal bind:open={createOpen} title="Add asset" size="md">
+	<form class="create-form" onsubmit={(event) => { event.preventDefault(); $createAssetMutation.mutate(); }}>
+		<label class="field"><span class="field-label">Name</span><input class="field-input" required bind:value={createName} placeholder="e.g. Alex or The workshop" /></label>
+		{#if createKind === 'character'}
+			<label class="field"><span class="field-label">Role</span><input class="field-input" bind:value={createRole} placeholder="e.g. protagonist" /></label>
+			<label class="field"><span class="field-label">Age</span><input class="field-input" bind:value={createAge} placeholder="e.g. 30" /></label>
+			<label class="field"><span class="field-label">Appearance</span><textarea class="field-textarea" rows="3" bind:value={createAppearance}></textarea></label>
+			<label class="field"><span class="field-label">Personality</span><textarea class="field-textarea" rows="3" bind:value={createPersonality}></textarea></label>
+		{:else}
+			<label class="field"><span class="field-label">Description</span><textarea class="field-textarea" rows="5" bind:value={createDescription}></textarea></label>
+		{/if}
+		<div class="row"><Button type="button" variant="ghost" onclick={() => (createOpen = false)}>Cancel</Button><Button type="submit" variant="primary" loading={$createAssetMutation.isPending}>Create asset</Button></div>
+	</form>
+</Modal>
+
 <style>
+	.create-form {
+		display: grid;
+		gap: var(--space-md);
+	}
 	.stage-header {
 		display: flex;
 		justify-content: space-between;
