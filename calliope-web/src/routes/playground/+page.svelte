@@ -423,6 +423,18 @@
 							{/if}
 
 							<div class="card-actions">
+								{#if job.status === 'done' && job.payload?.input_values}
+									<button
+										class="btn btn-secondary"
+										type="button"
+										onclick={() => {
+											openArtifact(job);
+											artifactEditing = true;
+										}}
+									>
+										Edit
+									</button>
+								{/if}
 								{#if primaryPath && primaryMedia}
 									<AttachToProject path={primaryPath} kind={job.kind} />
 								{/if}
