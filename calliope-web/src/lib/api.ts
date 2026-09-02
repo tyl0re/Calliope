@@ -339,7 +339,11 @@ export interface PlaygroundUploadListItem {
 export const playgroundApi = {
 	project: () => api<Project>('/api/playground/project'),
 	jobs: () => api<Job[]>('/api/playground/jobs'),
-	generate: (payload: { workflow_id: number; input_values?: Record<string, unknown> }) =>
+	generate: (payload: {
+		workflow_id: number;
+		input_values?: Record<string, unknown>;
+		random_seed?: boolean;
+	}) =>
 		api<{ ok: boolean; job: Job }>('/api/playground/generate', {
 			method: 'POST',
 			body: JSON.stringify(payload),

@@ -40,6 +40,10 @@ Video activity events use the stable scene order as a clip label, for example `C
 
 Video reference wiring is now ordered by the scene relationship order and prose workflows receive all available character/location reference images instead of only the first character image. Subject descriptions prefer the reusable Story appearance/description fields over asset-layout instructions, preventing character-sheet directions from leaking into shot prompts. Video jobs reject workflows that complete without a video file, and random-seed handling covers KSampler, KSamplerAdvanced, RandomNoise, and tagged API seed inputs.
 
+## Playground Artifact Editing
+
+Clicking a Playground artifact opens its recorded prompt and generation settings below the artifact rail. The prompt can be edited and regenerated as a new job with a fresh seed while preserving the original artifact. Settings are read from the persisted job payload, so the editor also works for workflows that are no longer enabled.
+
 MiniMax-H3 examples use the community INT8 ConvRot uncensored text encoder as a drop-in `CLIPLoader` replacement. Its visual path requires the documented BF16 embedding compatibility patch because matching the diffusion-model quantization alone does not fix the text-encoder limitation. This changes the text-encoder component only; it does not remove all model, provider, or workflow-level safety behavior.
 
 The Playground T2V/I2V examples use the Comfy-Org pruned FP8 FL2VA diffusion model and matching four-step LoRA. Their standard output path is intentionally direct to `VHS_VideoCombine`; optional LTX-2 and RTX post-processing dependencies are not required for the baseline render.

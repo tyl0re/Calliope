@@ -26,6 +26,7 @@ PLAYGROUND_TITLE = "Playground Scratch"
 class PlaygroundGenerate(BaseModel):
     workflow_id: int
     input_values: dict[str, Any] = Field(default_factory=dict)
+    random_seed: bool = True
 
 
 class PlaygroundAttach(BaseModel):
@@ -322,7 +323,11 @@ async def generate(payload: PlaygroundGenerate) -> dict[str, Any]:
         kind=kind,
         workflow_id=payload.workflow_id,
         scene_id=None,
-        payload={"input_values": payload.input_values, "source": "playground"},
+        payload={
+            "input_values": payload.input_values,
+            "random_seed": payload.random_seed,
+            "source": "playground",
+        },
     )
     await event_bus.publish(
         "job.created",
