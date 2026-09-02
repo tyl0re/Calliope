@@ -52,7 +52,7 @@ def _h3_subjects(
                 "index": len(subjects) + 1,
                 "kind": "character",
                 "name": c.get("name"),
-                "appearance": c.get("consistency_prompt") or c.get("appearance") or "",
+                "appearance": c.get("appearance") or c.get("consistency_prompt") or "",
             }
         )
         paths.append(img)
@@ -63,7 +63,7 @@ def _h3_subjects(
                 "index": len(subjects) + 1,
                 "kind": "location",
                 "name": loc.get("name"),
-                "appearance": loc.get("consistency_prompt") or loc.get("description") or "",
+                "appearance": loc.get("description") or loc.get("consistency_prompt") or "",
             }
         )
         paths.append(loc_image)
@@ -115,15 +115,12 @@ def _previous_clip(
     row = conn.execute(
         """
         SELECT video_path FROM scenes
-        WHERE project_id = ? AND order_index < ? AND video_path IS NOT NULL
+        WHERE project_id = ? AND order_index < ?
         ORDER BY order_index DESC LIMIT 1
         """,
         (project_id, order_index),
     ).fetchone()
-    has_earlier = conn.execute(
-        "SELECT 1 FROM scenes WHERE project_id = ? AND order_index < ? LIMIT 1",
-        (project_id, order_index),
-    ).fetchone() is not None
+    has_earlier = row is not None
     path = row["video_path"] if row else None
     if path and Path(path).exists():
         return path, has_earlier
@@ -144,17 +141,14 @@ def _get_workflow(workflow_id: int | None = None) -> dict[str, Any] | None:
     try:
         if workflow_id:
             row = conn.execute(
-                "SELECT * FROM workflows WHERE id = ? AND is_enabled = 1", (workflow_id,)
+                "SELECT * FROM workflows WHERE id = ? AND kind = 'video' AND is_enabled = 1",
+                (workflow_id,),
             ).fetchone()
         else:
             row = conn.execute(
                 "SELECT * FROM workflows WHERE kind = 'video' AND is_enabled = 1 "
                 "ORDER BY id ASC LIMIT 1"
             ).fetchone()
-            if not row:
-                row = conn.execute(
-                    "SELECT * FROM workflows WHERE is_enabled = 1 ORDER BY id ASC LIMIT 1"
-                ).fetchone()
         return row_to_dict(row) if row else None
     finally:
         conn.close()
@@ -352,18 +346,11 @@ async def enqueue_video_jobs(
                 SELECT c.* FROM characters c
                 JOIN scene_characters sc ON sc.character_id = c.id
                 WHERE sc.scene_id = ?
+                ORDER BY sc.rowid ASC
                 """,
                 (scene["id"],),
             ).fetchall()
             characters = [row_to_dict(r) for r in char_rows]
-            char_image = next(
-                (
-                    c.get("sheet_path") or c.get("portrait_path")
-                    for c in characters
-                    if c.get("sheet_path") or c.get("portrait_path")
-                ),
-                None,
-            )
             loc_image = scene.get("env_image_path")
             loc_row: dict[str, Any] | None = None
             if scene.get("location_id"):
@@ -421,11 +408,11 @@ async def enqueue_video_jobs(
                 prompt = (prompts or {}).get(scene["id"]) or scene_video_prompt(
                     scene, characters
                 )
+                _, ref_paths = _h3_subjects(characters, loc_row, loc_image, inputs)
                 values = smart_fill_inputs(
                     inputs,
                     prompt=prompt,
-                    character_image=char_image,
-                    location_image=loc_image,
+                    ref_images=ref_paths,
                     duration=duration,
                     extra=extra_values,
                 )

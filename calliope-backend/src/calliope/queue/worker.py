@@ -34,6 +34,9 @@ def randomize_sampler_seeds(workflow: dict[str, Any]) -> dict[str, Any]:
             if "(Input:seed)" in title:
                 node.setdefault("inputs", {})["value"] = secrets.randbelow(2**31)
             continue
+        if class_type == "RandomNoise":
+            node.setdefault("inputs", {})["noise_seed"] = secrets.randbelow(2**63)
+            continue
         if class_type not in {"KSampler", "KSamplerAdvanced"}:
             continue
         inputs = node.setdefault("inputs", {})
@@ -171,6 +174,10 @@ class QueueWorker:
                 raise RuntimeError(f"ComfyUI error: {messages}")
 
             outputs_meta = client.extract_outputs(history)
+            if kind == "video":
+                outputs_meta = [meta for meta in outputs_meta if client.is_video_output(meta)]
+                if not outputs_meta:
+                    raise RuntimeError("Video workflow completed without a video output")
             dest_dir = config.settings.assets_dir / str(project_id) / kind
             dest_dir.mkdir(parents=True, exist_ok=True)
             paths: list[str] = []

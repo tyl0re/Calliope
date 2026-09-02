@@ -154,9 +154,7 @@
 		(($workflowsQuery.data ?? []) as Workflow[]).filter((w) => w.is_enabled && w.kind === 'video'),
 	);
 	const enabledWorkflows = $derived(
-		videoWorkflows.length > 0
-			? videoWorkflows
-			: (($workflowsQuery.data ?? []) as Workflow[]).filter((w) => w.is_enabled),
+		videoWorkflows,
 	);
 
 	$effect(() => {

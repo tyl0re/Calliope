@@ -246,7 +246,7 @@ def _scene_ids(pid: int) -> list[int]:
         conn.close()
 
 
-async def _fake_history(_client, _prompt_id):
+async def _fake_history(_client, _prompt_id, _job=None):
     """A successful ComfyUI history with one video output named out.mp4."""
     return {
         "status": {"status_str": "success", "completed": True},
@@ -395,7 +395,7 @@ def test_worker_passes_plain_job_unchanged(client, monkeypatch):
     finally:
         conn.close()
 
-    jobs = asyncio.run(enqueue_video_jobs(pid, scene_ids=[_scene_ids(pid)[0]]))
+    asyncio.run(enqueue_video_jobs(pid, scene_ids=[_scene_ids(pid)[0]]))
     payloads = _job_payloads(pid)
     assert len(payloads) == 1
     assert "continue_source" not in payloads[0]
