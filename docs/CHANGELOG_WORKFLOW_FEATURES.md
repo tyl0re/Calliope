@@ -24,6 +24,10 @@ Settings expose a persisted Krea 2 generation mode. Asset workflow selection fol
 
 Assets now link forward to Script, and Script links forward to Video. Regenerating a script calls the project endpoint directly, confirms before replacing the scene list, and uses the project's target duration to determine the scene count. Script generation has no random seed; variability comes from the configured LLM sampling settings.
 
+Script regeneration no longer preserves an accidentally oversized existing board when `replace=true`. It uses the duration-based recommendation unless the caller explicitly requests a scene count, then normalizes each returned `duration_sec` so the scene durations add up to the requested runtime instead of inheriting one repeated model value.
+
+The script prompt now asks the LLM for editorial durations from 4–15 seconds based on action complexity, dialogue, reveals, reactions, and transitions. Normalization preserves those relative recommendations while fitting the project's target runtime, so an edit does not turn every clip into the same length.
+
 ## Post-Render Video Prompt Editing
 
 The Video stage keeps the prompt and input payload for each render job. After a clip has been rendered, contributors can open **View prompt & inputs**, select a job from the scene history, choose **Edit prompt**, and regenerate with a revised prompt. Saving the revised prompt updates the scene draft so future generations reuse it. The separate **Regenerate** action forces a fresh LLM rewrite instead of returning the existing draft.

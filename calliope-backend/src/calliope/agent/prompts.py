@@ -204,7 +204,8 @@ Locations:
 2. order_index must run 1, 2, 3, ... {scene_n} with no gaps.
 3. Do NOT collapse back to fewer scenes. The user expanded the script to {scene_n} clips — fill all of them.
 4. Sum of duration_sec across all scenes should be approximately {secs} (within ±15%).
-5. Prefer short scenes (5–10s) — this is for AI video clips. Spread the beat arc across all {scene_n} scenes.
+5. duration_sec is an editorial recommendation, not a constant: vary it intentionally between 4 and 15 seconds based on action complexity, dialogue, reveals, reaction beats, and transitions.
+6. Prefer short scenes (5–10s) for ordinary beats, but give visually important reveals or sustained actions more time. Spread the beat arc across all {scene_n} scenes.
 
 === ACTION DETAIL (this text IS the video prompt — users copy it straight into the generator) ===
 Each scene's "action" is fed verbatim to an AI video generator. Write 4–6 vivid present-tense
