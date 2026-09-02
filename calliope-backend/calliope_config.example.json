@@ -15,7 +15,7 @@
   "queue_poll_timeout_sec": 1800,
   "queue_max_retries": 4,
   "script_min_scene_duration_sec": 4,
-  "script_max_scene_duration_sec": 15,
+  "script_max_scene_duration_sec": 30,
   "script_target_scene_duration_sec": 10,
   "dry_run": false
 }
