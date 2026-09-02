@@ -117,7 +117,7 @@
   },
   "163": {
     "inputs": {
-      "clip_name": "minimax-h3/qwen3vl_32b_minimax_h3_int8_convrot_uncensored-by-linjian257.safetensors",
+      "clip_name": "minimax-h3/qwen3vl_32b_minimax_h3_int8_convrot.comfy.safetensors",
       "type": "minimax",
       "device": "default"
     },
