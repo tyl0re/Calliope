@@ -42,6 +42,8 @@ Video reference wiring is now ordered by the scene relationship order and prose 
 
 MiniMax-H3 examples can use the community INT8 ConvRot uncensored text encoder as a drop-in `CLIPLoader` replacement. This changes the text-encoder component only; it does not remove all model, provider, or workflow-level safety behavior.
 
+The Playground T2V/I2V examples use the Comfy-Org pruned FP8 FL2VA diffusion model and matching four-step LoRA. Their standard output path is intentionally direct to `VHS_VideoCombine`; optional LTX-2 and RTX post-processing dependencies are not required for the baseline render.
+
 ## Security And Portability
 
 API credentials are kept in ignored local configuration and are exposed through public settings only as boolean presence flags. The ComfyUI API key is passed to API nodes through `extra_data`, never logged or returned. No model weights, generated media, SQLite databases, absolute machine paths, or user-specific configuration are part of this change set.
