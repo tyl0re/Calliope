@@ -27,6 +27,8 @@
 	let missingLabels = $state<string[]>([]);
 	let artifactJob = $state<Job | null>(null);
 	let artifactPrompt = $state('');
+	let artifactValues = $state<Record<string, unknown>>({});
+	let artifactEditing = $state(false);
 	let artifactError = $state('');
 
 	const workflowsQuery = createQuery({
@@ -54,14 +56,16 @@
 	);
 	const artifactSettings = $derived.by(() => {
 		if (!artifactJob?.payload?.input_values) return [];
-		const values = artifactJob.payload.input_values as Record<string, unknown>;
+		const values = artifactValues;
 		return Object.entries(values)
 			.filter(([nodeId, value]) => {
 				const input = artifactWorkflow?.input_schema.find((item) => item.nodeId === nodeId);
 				return input?.role !== 'prompt' && value !== null && value !== undefined && String(value) !== '';
 			})
 			.map(([nodeId, value]) => ({
+				nodeId,
 				label: artifactWorkflow?.input_schema.find((item) => item.nodeId === nodeId)?.label ?? nodeId,
+				kind: artifactWorkflow?.input_schema.find((item) => item.nodeId === nodeId)?.kind ?? 'text',
 				value: String(value),
 			}));
 	});
@@ -131,7 +135,7 @@
 			if (!artifactJob || !artifactWorkflow) throw new Error('Artifact workflow is unavailable');
 			const promptInput = artifactWorkflow.input_schema.find((input) => input.role === 'prompt');
 			if (!promptInput) throw new Error('Artifact workflow has no prompt input');
-			const values = { ...(artifactJob.payload?.input_values as Record<string, unknown>) };
+			const values = { ...artifactValues };
 			values[promptInput.nodeId] = artifactPrompt;
 			return playgroundApi.generate({
 				workflow_id: artifactWorkflow.id,
@@ -166,6 +170,7 @@
 
 	function openArtifact(job: Job) {
 		artifactJob = job;
+		artifactEditing = false;
 		artifactError = '';
 		const workflow = allWorkflows.find((candidate) => candidate.id === job.workflow_id);
 		const promptInput = workflow?.input_schema.find((input) => input.role === 'prompt');
@@ -174,6 +179,7 @@
 		artifactPrompt =
 			(typeof job.payload?.prompt === 'string' && job.payload.prompt) ||
 			(typeof value === 'string' ? value : '');
+		artifactValues = { ...inputValues };
 	}
 
 	async function deleteJob(job: Job) {
@@ -454,7 +460,14 @@
 						<p class="eyebrow">Artifact #{artifactJob.id}</p>
 						<h2 id="artifact-editor-title">Prompt &amp; settings</h2>
 					</div>
-					<button class="btn btn-ghost" type="button" onclick={() => (artifactJob = null)}>Close</button>
+					<div class="artifact-editor-actions">
+						{#if artifactEditing}
+							<button class="btn btn-secondary" type="button" onclick={() => (artifactEditing = false)}>Cancel</button>
+						{:else}
+							<button class="btn btn-secondary" type="button" onclick={() => (artifactEditing = true)}>Edit</button>
+						{/if}
+						<button class="btn btn-ghost" type="button" onclick={() => { artifactJob = null; artifactEditing = false; }}>Close</button>
+					</div>
 				</div>
 				<label class="field">
 					<span class="field-label">Prompt</span>
@@ -462,6 +475,7 @@
 						class="field-textarea artifact-prompt"
 						rows="8"
 						value={artifactPrompt}
+						readonly={!artifactEditing}
 						oninput={(event) => (artifactPrompt = event.currentTarget.value)}
 					></textarea>
 				</label>
@@ -469,11 +483,24 @@
 					<div class="artifact-settings">
 						<h3>Generation settings</h3>
 						{#each artifactSettings as setting (setting.label)}
-							<div class="artifact-setting"><span>{setting.label}</span><code>{setting.value}</code></div>
+							<label class="artifact-setting">
+								<span>{setting.label}</span>
+								{#if artifactEditing}
+									<input
+										class="artifact-setting-input"
+										type={setting.kind === 'number' ? 'number' : 'text'}
+										value={setting.value}
+										oninput={(event) => (artifactValues = { ...artifactValues, [setting.nodeId]: setting.kind === 'number' ? Number(event.currentTarget.value) : event.currentTarget.value })}
+									/>
+								{:else}
+									<code>{setting.value}</code>
+								{/if}
+							</label>
 						{/each}
 					</div>
 				{/if}
 				{#if artifactError}<p class="err">{artifactError}</p>{/if}
+				{#if artifactEditing}
 				<button
 					class="btn btn-primary"
 					type="button"
@@ -482,6 +509,7 @@
 				>
 					{$regenerateArtifactMutation.isPending ? 'Queueing…' : 'Regenerate with new seed'}
 				</button>
+				{/if}
 			</section>
 		{/if}
 
@@ -628,6 +656,10 @@
 		gap: 16px;
 		margin-bottom: 16px;
 	}
+	.artifact-editor-actions {
+		display: flex;
+		gap: 8px;
+	}
 	.artifact-editor h2,
 	.artifact-settings h3 {
 		margin: 0;
@@ -650,6 +682,14 @@
 		border-radius: 8px;
 		background: var(--bg-elevated);
 		color: var(--text-secondary);
+	}
+	.artifact-setting-input {
+		width: min(55%, 360px);
+		padding: 6px 8px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
 	}
 
 	.artifacts-head {

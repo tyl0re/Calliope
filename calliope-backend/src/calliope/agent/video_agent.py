@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -164,6 +165,26 @@ def _scene_video_settings(scene: dict[str, Any]) -> dict[str, Any]:
     except (json.JSONDecodeError, TypeError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _save_prompt_draft(
+    conn: sqlite3.Connection,
+    scene: dict[str, Any],
+    workflow_id: int | None,
+    prompt: str,
+) -> None:
+    settings = _scene_video_settings(scene)
+    settings["prompt_draft"] = prompt
+    settings["prompt_draft_meta"] = {
+        "based_on": _scene_prompt_hash(scene),
+        "workflow_id": workflow_id,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    scene["video_settings_json"] = json.dumps(settings)
+    conn.execute(
+        "UPDATE scenes SET video_settings_json = ? WHERE id = ?",
+        (scene["video_settings_json"], scene["id"]),
+    )
 
 
 def _stored_input_values(scene: dict[str, Any]) -> dict[str, Any]:
@@ -382,7 +403,10 @@ async def enqueue_video_jobs(
                     candidate = _stored_prompt_draft(scene)
                     if candidate:
                         meta = _scene_video_settings(scene).get("prompt_draft_meta") or {}
-                        if meta.get("based_on") == _scene_prompt_hash(scene):
+                        if (
+                            meta.get("based_on") == _scene_prompt_hash(scene)
+                            and meta.get("workflow_id") == workflow_id
+                        ):
                             fresh_draft = candidate
                 if explicit_prompt is not None:
                     prompt = explicit_prompt
@@ -416,6 +440,8 @@ async def enqueue_video_jobs(
                     duration=duration,
                     extra=extra_values,
                 )
+            _save_prompt_draft(conn, scene, workflow_id, prompt)
+            conn.commit()
             # Stored per-scene setups override smart-fill's context choices
             # (e.g. an edited duration). smart_fill skips duration-role nodes
             # in `extra` by design — re-apply them here, request values win.

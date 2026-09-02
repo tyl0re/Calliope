@@ -42,7 +42,9 @@ Video reference wiring is now ordered by the scene relationship order and prose 
 
 ## Playground Artifact Editing
 
-Clicking a Playground artifact opens its recorded prompt and generation settings below the artifact rail. The prompt can be edited and regenerated as a new job with a fresh seed while preserving the original artifact. Settings are read from the persisted job payload, so the editor also works for workflows that are no longer enabled.
+Clicking a Playground artifact opens its recorded prompt and generation settings below the artifact rail. The media remains a playback action; an explicit **Edit** control unlocks the prompt and editable numeric/text settings such as duration. **Regenerate with new seed** creates a new job while preserving the original artifact. Settings are read from the persisted job payload, so the editor also works for workflows that are no longer enabled.
+
+Generate-all persists every resolved scene prompt and its workflow identity before queueing the render. This keeps prompt history available after batch generation and prevents a workflow change from silently reusing a stale prompt draft.
 
 MiniMax-H3 examples use the community INT8 ConvRot uncensored text encoder as a drop-in `CLIPLoader` replacement. Its visual path requires the documented BF16 embedding compatibility patch because matching the diffusion-model quantization alone does not fix the text-encoder limitation. This changes the text-encoder component only; it does not remove all model, provider, or workflow-level safety behavior.
 
