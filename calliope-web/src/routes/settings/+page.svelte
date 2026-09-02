@@ -37,6 +37,9 @@
 		comfyui_base_url: 'comfy',
 		comfyui_api_key: 'comfy',
 		krea2_mode: 'comfy',
+		script_min_scene_duration_sec: 'script',
+		script_max_scene_duration_sec: 'script',
+		script_target_scene_duration_sec: 'script',
 		dry_run: 'comfy',
 		queue_concurrency: 'queue',
 		queue_poll_interval_sec: 'queue',
@@ -501,6 +504,53 @@
 							Dry-run mode (off by default) — skip ComfyUI and write placeholder assets for testing only
 						</label>
 					</section>
+			{:else if tab === 'script'}
+				<section class="panel">
+					<h1>Script pacing</h1>
+					<p class="lead">
+						Control the editorial range and average clip length used when planning scenes.
+					</p>
+					<label class="field">
+						<span class="field-label">Minimum scene duration (seconds)</span>
+						<input
+							class="field-input"
+							type="number"
+							min="1"
+							max="60"
+							step="1"
+							value={String(fieldValue('script_min_scene_duration_sec', s.script_min_scene_duration_sec))}
+							oninput={(e) => (draft.script_min_scene_duration_sec = e.currentTarget.value)}
+						/>
+					</label>
+					<label class="field">
+						<span class="field-label">Maximum scene duration (seconds)</span>
+						<input
+							class="field-input"
+							type="number"
+							min="1"
+							max="60"
+							step="1"
+							value={String(fieldValue('script_max_scene_duration_sec', s.script_max_scene_duration_sec))}
+							oninput={(e) => (draft.script_max_scene_duration_sec = e.currentTarget.value)}
+						/>
+					</label>
+					<label class="field">
+						<span class="field-label">Target average scene duration (seconds)</span>
+						<input
+							class="field-input"
+							type="number"
+							min="1"
+							max="60"
+							step="1"
+							value={String(fieldValue('script_target_scene_duration_sec', s.script_target_scene_duration_sec))}
+							oninput={(e) => (draft.script_target_scene_duration_sec = e.currentTarget.value)}
+						/>
+						<p class="field-hint">
+							The LLM varies individual scenes inside the min/max range. A larger target average
+							creates fewer, longer scenes for the same film duration.
+						</p>
+					</label>
+				</section>
 			{:else if tab === 'queue'}
 				<section class="panel">
 					<h1>Queue</h1>

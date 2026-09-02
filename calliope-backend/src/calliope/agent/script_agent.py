@@ -67,27 +67,37 @@ def _persist_scenes(
     return created
 
 
-def _normalize_scene_durations(scenes: list[dict[str, Any]], total_seconds: int) -> None:
+def _normalize_scene_durations(
+    scenes: list[dict[str, Any]],
+    total_seconds: int,
+    min_duration: int = 4,
+    max_duration: int = 15,
+) -> None:
     if not scenes:
         return
-    target = max(total_seconds, len(scenes) * 4)
+    min_duration = max(1, min(min_duration, max_duration))
+    max_duration = max(min_duration, max_duration)
+    target = max(total_seconds, len(scenes) * min_duration)
     raw: list[int] = []
     for scene in scenes:
         try:
             value = int(float(scene.get("duration_sec") or 6))
         except (TypeError, ValueError):
             value = 6
-        raw.append(max(4, min(15, value)))
+        raw.append(max(min_duration, min(max_duration, value)))
     raw_total = sum(raw)
-    durations = [max(4, min(15, round(value * target / raw_total))) for value in raw]
+    durations = [
+        max(min_duration, min(max_duration, round(value * target / raw_total)))
+        for value in raw
+    ]
     while sum(durations) < target:
         index = max(range(len(durations)), key=lambda i: (raw[i], -i))
-        if durations[index] == 15:
+        if durations[index] == max_duration:
             break
         durations[index] += 1
     while sum(durations) > target:
         index = max(range(len(durations)), key=lambda i: (durations[i], raw[i], -i))
-        if durations[index] == 4:
+        if durations[index] == min_duration:
             break
         durations[index] -= 1
     for scene, duration in zip(scenes, durations):
@@ -133,7 +143,9 @@ async def generate_script(
             "SELECT COUNT(*) AS n FROM scenes WHERE project_id = ?",
             (project_id,),
         ).fetchone()["n"]
-        recommended = recommend_scene_count(p.get("target_duration"))
+        recommended = recommend_scene_count(
+            p.get("target_duration"), settings.script_target_scene_duration_sec
+        )
         # Prefer explicit request, else keep at least the board the user already built
         requested = (
             scene_count if scene_count and scene_count > 0 else existing_n if not replace else 0
@@ -157,6 +169,9 @@ async def generate_script(
             locations=locations,
             target_duration=p.get("target_duration"),
             scene_count=required_scenes,
+            min_scene_duration_sec=settings.script_min_scene_duration_sec,
+            max_scene_duration_sec=settings.script_max_scene_duration_sec,
+            target_scene_duration_sec=settings.script_target_scene_duration_sec,
         )
         result = await generate_structured(messages, temperature=0.7)
         scenes_out = result.get("scenes") or []
@@ -193,7 +208,10 @@ async def generate_script(
                 )
 
         _normalize_scene_durations(
-            scenes_out, estimate_target_seconds(p.get("target_duration"))
+            scenes_out,
+            estimate_target_seconds(p.get("target_duration")),
+            settings.script_min_scene_duration_sec,
+            settings.script_max_scene_duration_sec,
         )
 
         if replace:

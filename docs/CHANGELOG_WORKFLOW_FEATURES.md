@@ -26,7 +26,7 @@ Assets now link forward to Script, and Script links forward to Video. Regenerati
 
 Script regeneration no longer preserves an accidentally oversized existing board when `replace=true`. It uses the duration-based recommendation unless the caller explicitly requests a scene count, then normalizes each returned `duration_sec` so the scene durations add up to the requested runtime instead of inheriting one repeated model value.
 
-The script prompt now asks the LLM for editorial durations from 4–15 seconds based on action complexity, dialogue, reveals, reactions, and transitions. Normalization preserves those relative recommendations while fitting the project's target runtime, so an edit does not turn every clip into the same length.
+The script prompt now asks the LLM for editorial durations inside the configurable min/max range based on action complexity, dialogue, reveals, reactions, and transitions. The target average duration controls scene-count recommendations: a larger value produces fewer, longer scenes. Normalization preserves the LLM's relative recommendations while fitting the project's target runtime, so an edit does not turn every clip into the same length.
 
 ## Post-Render Video Prompt Editing
 
