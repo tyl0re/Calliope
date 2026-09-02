@@ -40,6 +40,8 @@ Video activity events use the stable scene order as a clip label, for example `C
 
 Video reference wiring is now ordered by the scene relationship order and prose workflows receive all available character/location reference images instead of only the first character image. Subject descriptions prefer the reusable Story appearance/description fields over asset-layout instructions, preventing character-sheet directions from leaking into shot prompts. Video jobs reject workflows that complete without a video file, and random-seed handling covers KSampler, KSamplerAdvanced, RandomNoise, and tagged API seed inputs.
 
+MiniMax-H3 examples can use the community INT8 ConvRot uncensored text encoder as a drop-in `CLIPLoader` replacement. This changes the text-encoder component only; it does not remove all model, provider, or workflow-level safety behavior.
+
 ## Security And Portability
 
 API credentials are kept in ignored local configuration and are exposed through public settings only as boolean presence flags. The ComfyUI API key is passed to API nodes through `extra_data`, never logged or returned. No model weights, generated media, SQLite databases, absolute machine paths, or user-specific configuration are part of this change set.
