@@ -178,7 +178,6 @@ def _find_workflow_for_reference_count(
     rows = conn.execute(
         "SELECT * FROM workflows WHERE kind = 'video' AND is_enabled = 1 ORDER BY id ASC"
     ).fetchall()
-    text_words = {word.strip(".,:;()[]{}\"") for word in text.split()}
     candidates = []
     for row in rows:
         workflow = row_to_dict(row)
@@ -244,6 +243,7 @@ def _load_scene_items(conn: sqlite3.Connection, scene: dict[str, Any]) -> list[d
         str(scene.get(key) or "")
         for key in ("heading", "action", "dialog", "creative_direction", "video_settings_json")
     ).casefold()
+    text_words = {word.strip(".,:;()[]{}\"") for word in text.split()}
     candidates = []
     for row in conn.execute(
         "SELECT * FROM items WHERE project_id = ? ORDER BY id ASC", (scene["project_id"],)
@@ -552,7 +552,7 @@ async def enqueue_video_jobs(
                             "project_id": project_id,
                         },
                     )
-                    prompt = await _h3_rewrite(scene, subjects)
+                prompt = await _h3_rewrite(scene, subjects, timeout=30.0)
                 values = smart_fill_inputs(
                     inputs,
                     prompt=prompt,
