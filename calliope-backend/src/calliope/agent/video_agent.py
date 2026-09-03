@@ -35,6 +35,7 @@ def _h3_subjects(
     location: dict[str, Any] | None,
     loc_image: str | None,
     inputs: list[dict[str, Any]],
+    include_all: bool = False,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Ordered subject roster + ref image paths for the H3 ref profile.
 
@@ -69,6 +70,8 @@ def _h3_subjects(
         )
         paths.append(loc_image)
     cap = len(ref_image_slots(inputs))
+    if include_all:
+        return subjects, paths
     return subjects[:cap], paths[:cap]
 
 
@@ -300,6 +303,27 @@ async def preview_scene_prompt(
     based_on = _scene_prompt_hash(scene)
 
     if profile == "minimax_h3_ref":
+        current_subjects, current_paths = _h3_subjects(
+            characters, loc_row, loc_image, inputs, include_all=True
+        )
+        required_refs = sum(1 for item in inputs if item.get("role") == "image")
+        if (required_refs > 0 and len(current_paths) != required_refs) or (
+            required_refs == 0 and len(current_paths) > 0
+        ):
+            db = get_db(settings.db_path)
+            try:
+                fallback = _find_workflow_for_reference_count(db, len(current_paths))
+                if fallback and fallback["id"] != wf_id:
+                    workflow = fallback
+                    wf_id = workflow["id"]
+                    inputs = parse_dynamic_inputs(_workflow_json(workflow))
+                    db.execute(
+                        "UPDATE scenes SET workflow_id = ? WHERE id = ?",
+                        (wf_id, scene_id),
+                    )
+                    db.commit()
+            finally:
+                db.close()
         # Fresh saved draft short-circuits the LLM call
         draft = _stored_prompt_draft(scene)
         if draft and not force_rewrite:
@@ -423,9 +447,13 @@ async def enqueue_video_jobs(
                     {k: v for k, v in input_values_override.items() if v not in (None, "")}
                 )
             if profile == "minimax_h3_ref":
-                subjects, ref_paths = _h3_subjects(characters, loc_row, loc_image, inputs)
+                subjects, ref_paths = _h3_subjects(
+                    characters, loc_row, loc_image, inputs, include_all=True
+                )
                 required_refs = sum(1 for item in inputs if item.get("role") == "image")
-                if len(ref_paths) < required_refs:
+                if (required_refs > 0 and len(ref_paths) != required_refs) or (
+                    required_refs == 0 and len(ref_paths) > 0
+                ):
                     fallback = _find_workflow_for_reference_count(conn, len(ref_paths))
                     if fallback and fallback["id"] != wf_id:
                         workflow = fallback
