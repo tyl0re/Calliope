@@ -26,6 +26,7 @@
 	let deletingId = $state<number | null>(null);
 	let sceneToDelete = $state<Scene | null>(null);
 	let deleteOpen = $state(false);
+	let scriptInstructionsDraft = $state('');
 
 	const scenesQuery = createQuery(
 		toStore(() => ({
@@ -77,6 +78,16 @@
 		onError: (err) => {
 			toast.error(err instanceof Error ? err.message : 'Could not regenerate script');
 		},
+	});
+
+	$effect(() => {
+		if ($storyQuery.data?.project) scriptInstructionsDraft = $storyQuery.data.project.script_instructions ?? '';
+	});
+
+	const saveInstructionsMutation = createMutation({
+		mutationFn: () => projects.update(projectId, { script_instructions: scriptInstructionsDraft }),
+		onSuccess: () => { client.invalidateQueries({ queryKey: ['story', projectId] }); toast.success('Script instructions saved'); },
+		onError: (err) => toast.error(err instanceof Error ? err.message : 'Could not save script instructions'),
 	});
 
 	const busy = $derived(adding || deletingId != null || $regenerateMutation.isPending);
@@ -315,6 +326,12 @@
 	</div>
 </header>
 
+<section class="script-instructions" aria-labelledby="script-instructions-title">
+	<div><h3 id="script-instructions-title">Global script instructions</h3><p class="muted small">Applied when the Script LLM generates or regenerates scenes.</p></div>
+	<textarea class="field-textarea" rows="3" bind:value={scriptInstructionsDraft} placeholder="Use more dialogue. Make Act 3 very dark. Ensure the box is opened in scene 5." onblur={() => $saveInstructionsMutation.mutate()}></textarea>
+	<Button variant="secondary" size="sm" loading={$saveInstructionsMutation.isPending} onclick={() => $saveInstructionsMutation.mutate()}>Save instructions</Button>
+</section>
+
 <div class="script-panel">
 	{#if $scenesQuery.isLoading}
 		<div class="card">Loading scenes…</div>
@@ -514,6 +531,19 @@
 />
 
 <style>
+	.script-instructions {
+		display: grid;
+		gap: 10px;
+		margin-bottom: var(--space-lg);
+		padding: 16px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: var(--bg-elevated);
+	}
+	.script-instructions h3,
+	.script-instructions p {
+		margin: 0;
+	}
 	.stage-header {
 		/* Pins inside the stage scroll container so Add Scene / Regenerate
 		   stay reachable while scrolling long scripts. */
