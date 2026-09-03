@@ -90,6 +90,12 @@ CREATE TABLE IF NOT EXISTS scene_characters (
     PRIMARY KEY (scene_id, character_id)
 );
 
+CREATE TABLE IF NOT EXISTS scene_items (
+    scene_id INTEGER NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+    item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    PRIMARY KEY (scene_id, item_id)
+);
+
 CREATE TABLE IF NOT EXISTS workflows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,

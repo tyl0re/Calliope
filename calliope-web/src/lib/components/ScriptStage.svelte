@@ -208,11 +208,20 @@
 		$regenerateMutation.mutate();
 	}
 
-	async function updateSceneAssets(scene: Scene, characterIds: number[], locationId: number | null) {
+	async function updateSceneAssets(
+		scene: Scene,
+		characterIds: number[],
+		locationId: number | null,
+		itemIds: number[] = scene.item_ids ?? [],
+	) {
 		if (assetLinkPendingId != null) return;
 		assetLinkPendingId = scene.id;
 		try {
-			await projects.updateScene(projectId, scene.id, { character_ids: characterIds, location_id: locationId });
+			await projects.updateScene(projectId, scene.id, {
+				character_ids: characterIds,
+				location_id: locationId,
+				item_ids: itemIds,
+			});
 			await client.invalidateQueries({ queryKey: ['scenes'] });
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Could not update scene assets');
@@ -428,7 +437,7 @@
 								class="chip-remove"
 								aria-label={`Remove ${c.name} from scene`}
 								disabled={assetLinkPendingId === scene.id}
-								onclick={() => updateSceneAssets(scene, (scene.character_ids ?? []).filter((id) => id !== c.id), scene.location_id)}
+																		onclick={() => updateSceneAssets(scene, (scene.character_ids ?? []).filter((id) => id !== c.id), scene.location_id)}
 							>
 								×
 							</button>
@@ -439,6 +448,11 @@
 						{#each ($assetsQuery.data?.characters ?? []).filter((c) => !(scene.character_ids ?? []).includes(c.id)) as c (c.id)}
 							<option value={c.id}>{c.name}</option>
 						{/each}
+					</select>
+					{#each scene.items ?? [] as item (item.id)}<span class="chip">{item.name}<button type="button" class="chip-remove" aria-label={`Remove ${item.name} from scene`} disabled={assetLinkPendingId === scene.id} onclick={() => updateSceneAssets(scene, scene.character_ids ?? [], scene.location_id, (scene.item_ids ?? []).filter((id) => id !== item.id))}>×</button></span>{/each}
+					<select class="asset-select" aria-label="Add item to scene" disabled={assetLinkPendingId === scene.id} onchange={(event) => { const id = Number(event.currentTarget.value); if (id) updateSceneAssets(scene, scene.character_ids ?? [], scene.location_id, [...(scene.item_ids ?? []), id]); event.currentTarget.value = ''; }}>
+						<option value="">+ Item</option>
+						{#each ($assetsQuery.data?.items ?? []).filter((item) => !(scene.item_ids ?? []).includes(item.id)) as item (item.id)}<option value={item.id}>{item.name}</option>{/each}
 					</select>
 					{#if locName}
 						<span class="chip"><Icon name="folder" size={12} /> {locName}<button type="button" class="chip-remove" aria-label="Remove location from scene" disabled={assetLinkPendingId === scene.id} onclick={() => updateSceneAssets(scene, scene.character_ids ?? [], null)}>×</button></span>

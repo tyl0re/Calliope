@@ -127,6 +127,7 @@ class SceneCreate(BaseModel):
     env_image_path: str | None = None
     beat_id: int | None = None
     character_ids: list[int] = Field(default_factory=list)
+    item_ids: list[int] = Field(default_factory=list)
     location_id: int | None = None
     creative_direction: str | None = None
 
@@ -141,6 +142,7 @@ class SceneUpdate(BaseModel):
     env_image_path: str | None = None
     beat_id: int | None = None
     character_ids: list[int] | None = None
+    item_ids: list[int] | None = None
     location_id: int | None = None
     video_path: str | None = None
     chain_from_prev: bool | None = None

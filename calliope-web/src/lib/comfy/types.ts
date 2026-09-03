@@ -79,11 +79,18 @@ export interface Scene {
 	chain_from_prev?: number | boolean | null;
 	video_settings?: SceneVideoSettings | null;
 	character_ids: number[];
+	item_ids: number[];
 	characters: Array<{
 		id: number;
 		name: string;
 		role: string | null;
 		portrait_path: string | null;
 		sheet_path: string | null;
+	}>;
+	items: Array<{
+		id: number;
+		name: string;
+		description: string | null;
+		reference_image_path: string | null;
 	}>;
 }
