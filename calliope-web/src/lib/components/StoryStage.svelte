@@ -83,6 +83,8 @@
 	type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 	let saveState = $state<SaveState>('idle');
 	let savedTimer: ReturnType<typeof setTimeout> | null = null;
+	let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let draftProjectId = $state<number | null>(null);
 
 	const beatBudget = $derived(recommendBeatCount(lengthDraft));
 	const sceneBudget = $derived(recommendSceneCount(lengthDraft));
@@ -98,17 +100,25 @@
 	);
 
 	$effect(() => {
+		if (draftProjectId === projectId) return;
 		ideaDraft = story.project.idea ?? '';
 		genreDraft = story.project.genre || GENRES[0];
 		toneDraft = story.project.tone || TONES[0];
 		lengthDraft = story.project.target_duration || '2 minutes';
+		draftProjectId = projectId;
 	});
 
 	$effect(() => {
 		return () => {
 			if (savedTimer) clearTimeout(savedTimer);
+			if (draftSaveTimer) clearTimeout(draftSaveTimer);
 		};
 	});
+
+	function scheduleSettingsSave() {
+		if (draftSaveTimer) clearTimeout(draftSaveTimer);
+		draftSaveTimer = setTimeout(() => void persistSettings(), 700);
+	}
 
 	function armSavedTimer() {
 		if (savedTimer) clearTimeout(savedTimer);
@@ -375,6 +385,9 @@
 		<h3 class="card-h">Story Idea</h3>
 		<div class="head-actions">
 			{@render saveIndicator()}
+			<Button variant="secondary" size="sm" loading={$saveProject.isPending} onclick={() => void persistSettings()}>
+				Save story
+			</Button>
 			<Button variant="secondary" size="sm" disabled={!configured} loading={$generateStoryMutation.isPending} onclick={requestGenerateStory}>
 				<Icon name="sparkle" size={14} /> Generate beats
 			</Button>
@@ -385,6 +398,7 @@
 		bind:value={ideaDraft}
 		rows="5"
 		placeholder="A lone cartographer discovers a map that rewrites itself every midnight..."
+		oninput={scheduleSettingsSave}
 		onblur={() => void persistSettings()}
 	></textarea>
 </Card>
