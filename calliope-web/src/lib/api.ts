@@ -160,6 +160,10 @@ export const projects = {
 		api<Project>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
 	delete: (id: number) => api<{ ok: boolean }>(`/api/projects/${id}`, { method: 'DELETE' }),
 	getStory: (id: number) => api<StoryData>(`/api/projects/${id}/story`),
+	generateStory: (id: number, replace = true) =>
+		api<StoryData>(`/api/projects/${id}/generate-story?replace=${replace}`, {
+			method: 'POST',
+		}),
 	generateScript: (id: number, payload: { replace?: boolean; scene_count?: number } = {}) =>
 		api<{ ok: boolean; scenes: Scene[] }>(`/api/projects/${id}/generate-script`, {
 			method: 'POST',

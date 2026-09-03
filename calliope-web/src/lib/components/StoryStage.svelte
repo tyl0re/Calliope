@@ -138,6 +138,20 @@
 		},
 	});
 
+	const generateStoryMutation = createMutation({
+		mutationFn: async () => {
+			if (!(await persistSettings())) throw new Error('Could not save story settings');
+			return projects.generateStory(projectId, true);
+		},
+		onSuccess: async (result) => {
+			await client.invalidateQueries({ queryKey: ['story'] });
+			await client.invalidateQueries({ queryKey: ['assets'] });
+			await client.invalidateQueries({ queryKey: ['scenes'] });
+			toast.success(`Story regenerated — ${result.beats.length} beats`);
+		},
+		onError: (err) => toast.error(err instanceof Error ? err.message : 'Could not regenerate story'),
+	});
+
 	/** Autosave path — returns false on failure (mutation onError already toasted). */
 	async function persistSettings(): Promise<boolean> {
 		try {
@@ -165,6 +179,17 @@
 	function requestLoadExample() {
 		if (ideaDraft.trim()) confirmExampleOpen = true;
 		else void loadExample();
+	}
+
+	function requestGenerateStory() {
+		if (!configured || $generateStoryMutation.isPending) return;
+		if (
+			story.beats.length > 0 &&
+			!window.confirm('Regenerate the storyline from the current idea? Existing beats and generated story assets will be replaced.')
+		) {
+			return;
+		}
+		$generateStoryMutation.mutate();
 	}
 
 	/** Hand off to a fresh, project-linked agent chat with the composer pre-filled. */
@@ -348,7 +373,12 @@
 	<Card>
 	{#snippet header()}
 		<h3 class="card-h">Story Idea</h3>
-		{@render saveIndicator()}
+		<div class="head-actions">
+			{@render saveIndicator()}
+			<Button variant="secondary" size="sm" disabled={!configured} loading={$generateStoryMutation.isPending} onclick={requestGenerateStory}>
+				<Icon name="sparkle" size={14} /> Generate beats
+			</Button>
+		</div>
 	{/snippet}
 	<textarea
 		class="field-textarea"
