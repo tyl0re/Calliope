@@ -220,3 +220,5 @@ class PreviewPromptRequest(BaseModel):
     scene_id: int
     workflow_id: int | None = None
     force_rewrite: bool = False
+    skip_llm: bool = False
+    skip_llm: bool = False

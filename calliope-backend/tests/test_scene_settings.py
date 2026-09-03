@@ -107,7 +107,7 @@ def test_enqueue_merges_stored_input_values(client, monkeypatch):
         conn.close()
 
     # Skip the LLM rewrite — the fallback template is deterministic
-    async def fake_rewrite(scene_, subjects):
+    async def fake_rewrite(scene_, subjects, **kwargs):
         return "fallback"
 
     monkeypatch.setattr("calliope.agent.video_agent._h3_rewrite", fake_rewrite)
@@ -333,7 +333,7 @@ def test_enqueue_prompts_override(client, monkeypatch):
     finally:
         conn.close()
 
-    async def fake_rewrite(scene_, subjects):
+    async def fake_rewrite(scene_, subjects, **kwargs):
         return "LLM VERSION"
 
     monkeypatch.setattr("calliope.agent.video_agent._h3_rewrite", fake_rewrite)

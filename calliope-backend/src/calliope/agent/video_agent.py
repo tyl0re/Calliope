@@ -313,6 +313,7 @@ async def preview_scene_prompt(
     scene_id: int,
     workflow_id: int | None = None,
     force_rewrite: bool = False,
+    skip_llm: bool = False,
 ) -> dict[str, Any]:
     """Resolve the exact prompt a Generate would send — without enqueueing.
 
@@ -375,6 +376,7 @@ async def preview_scene_prompt(
                     db.commit()
             finally:
                 db.close()
+        subjects, _ = _h3_subjects(characters, loc_row, loc_image, items, inputs)
         # Fresh saved draft short-circuits the LLM call
         draft = _stored_prompt_draft(scene)
         if draft and not force_rewrite:
@@ -386,7 +388,13 @@ async def preview_scene_prompt(
                     "from_draft": True,
                     "based_on": based_on,
                 }
-        subjects, _ = _h3_subjects(characters, loc_row, loc_image, items, inputs)
+        if skip_llm and not force_rewrite:
+            return {
+                "prompt": minimax_h3_ref_fallback(scene, subjects),
+                "profile": profile,
+                "from_draft": False,
+                "based_on": based_on,
+            }
         await event_bus.publish(
             "agent.thinking",
             {
@@ -552,7 +560,7 @@ async def enqueue_video_jobs(
                             "project_id": project_id,
                         },
                     )
-                prompt = await _h3_rewrite(scene, subjects, timeout=30.0)
+                    prompt = await _h3_rewrite(scene, subjects, timeout=30.0)
                 values = smart_fill_inputs(
                     inputs,
                     prompt=prompt,

@@ -50,6 +50,7 @@
 	let failed = $state(false);
 	let loadedInitialPrompt = $state<string | null>(null);
 	let forceRewrite = $state(false);
+	let skipLlm = $state(true);
 
 	const preview = createMutation({
 		mutationFn: async () => {
@@ -58,6 +59,7 @@
 				scene_id: scene.id,
 				workflow_id: workflow?.id,
 				force_rewrite: forceRewrite,
+				skip_llm: skipLlm,
 			});
 		},
 		onSuccess: (data) => {
@@ -95,6 +97,7 @@
 			stale = false;
 			loadedInitialPrompt = initialPrompt;
 			forceRewrite = false;
+			skipLlm = true;
 			attemptedFor = scene.id;
 			return;
 		}
@@ -149,6 +152,7 @@
 	function regenerate() {
 		failed = false;
 		forceRewrite = true;
+		skipLlm = false;
 		$preview.mutate();
 	}
 
@@ -170,7 +174,7 @@
 	{:else if $preview.isPending}
 		<div class="loading">
 			<Spinner size="md" />
-			<span>Resolving prompt{workflow?.prompt_profile === 'minimax_h3_ref' ? ' (H3 rewrite)' : ''}…</span>
+			<span>Preparing prompt{skipLlm ? '' : ' (AI rewrite)'}…</span>
 		</div>
 	{:else}
 		<div class="head-row">
@@ -213,7 +217,7 @@
 			Save draft
 		</Button>
 		<Button variant="secondary" disabled={$preview.isPending} onclick={regenerate}>
-			<Icon name="retry" size={14} /> Regenerate
+				<Icon name="retry" size={14} /> Rewrite with AI
 		</Button>
 		<Button variant="primary" disabled={$preview.isPending || !text} onclick={confirmGenerate}>
 			<Icon name="play" size={14} /> Generate

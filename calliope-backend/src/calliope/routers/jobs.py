@@ -88,6 +88,7 @@ async def preview_prompt(project_id: int, payload: PreviewPromptRequest) -> dict
             payload.scene_id,
             workflow_id=payload.workflow_id,
             force_rewrite=payload.force_rewrite,
+            skip_llm=payload.skip_llm,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
