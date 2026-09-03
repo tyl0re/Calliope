@@ -206,5 +206,20 @@ class QueueManager:
         finally:
             conn.close()
 
+    def delete_queued(self, project_id: int | None = None) -> int:
+        conn = get_db(config.settings.db_path)
+        try:
+            if project_id is None:
+                cur = conn.execute("DELETE FROM jobs WHERE status = 'pending'")
+            else:
+                cur = conn.execute(
+                    "DELETE FROM jobs WHERE status = 'pending' AND project_id = ?",
+                    (project_id,),
+                )
+            conn.commit()
+            return cur.rowcount
+        finally:
+            conn.close()
+
 
 queue_manager = QueueManager()

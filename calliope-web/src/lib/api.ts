@@ -310,6 +310,10 @@ export const jobsApi = {
 	pause: () => api<{ ok: boolean; paused: boolean }>('/api/jobs/pause', { method: 'POST' }),
 	resume: () => api<{ ok: boolean; paused: boolean }>('/api/jobs/resume', { method: 'POST' }),
 	queueStatus: () => api<{ paused: boolean }>('/api/jobs/queue-status'),
+	clearQueued: (projectId?: number) =>
+		api<{ ok: boolean; deleted: number }>(`/api/jobs/queue${projectId ? `?project_id=${projectId}` : ''}`, {
+			method: 'DELETE',
+		}),
 	generateVideos: (
 		projectId: number,
 		payload: {

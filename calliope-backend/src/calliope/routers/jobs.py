@@ -56,6 +56,11 @@ async def resume_queue() -> dict[str, Any]:
     return {"ok": True, "paused": False}
 
 
+@router.delete("/queue")
+async def clear_queued_jobs(project_id: int | None = None) -> dict[str, Any]:
+    return {"ok": True, "deleted": queue_manager.delete_queued(project_id)}
+
+
 @router.post("/projects/{project_id}/generate-videos")
 async def generate_videos(
     project_id: int, payload: GenerateVideosRequest | None = None

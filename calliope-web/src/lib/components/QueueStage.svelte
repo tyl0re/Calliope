@@ -98,6 +98,7 @@
 	const totalSec = $derived(
 		scenes.reduce((sum, s) => sum + Math.max(s.duration_sec || 5, 1), 0),
 	);
+	const pendingJobs = $derived(($jobsQuery.data ?? []).filter((job) => job.status === 'pending'));
 
 	const assetOptions = $derived.by(() => {
 		const chars = $assetsQuery.data?.characters ?? [];
@@ -485,6 +486,14 @@
 		client.invalidateQueries({ queryKey: ['queue-status'] });
 	}
 
+	async function clearQueuedJobs() {
+		if (!pendingJobs.length) return;
+		if (!window.confirm(`Delete ${pendingJobs.length} queued job${pendingJobs.length === 1 ? '' : 's'}?`)) return;
+		await jobsApi.clearQueued(projectId);
+		await client.invalidateQueries({ queryKey: ['jobs', projectId] });
+		toast.success(`Deleted ${pendingJobs.length} queued job${pendingJobs.length === 1 ? '' : 's'}`);
+	}
+
 	function selectScene(id: number) {
 		selectedId = id;
 	}
@@ -627,6 +636,9 @@
 		<Button variant="secondary" onclick={togglePause}>
 			{$queueStatusQuery.data?.paused ? 'Resume queue' : 'Pause queue'}
 		</Button>
+		{#if pendingJobs.length > 0}
+			<Button variant="danger" onclick={clearQueuedJobs}>Clear queued ({pendingJobs.length})</Button>
+		{/if}
 		<div class="view-toggle" role="tablist" aria-label="Video stage view">
 			<button
 				type="button"
