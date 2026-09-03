@@ -186,6 +186,32 @@ def _scene_video_settings(scene: dict[str, Any]) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _load_scene_characters(conn: sqlite3.Connection, scene: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT c.* FROM characters c
+        JOIN scene_characters sc ON sc.character_id = c.id
+        WHERE sc.scene_id = ?
+        ORDER BY sc.rowid ASC
+        """,
+        (scene["id"],),
+    ).fetchall()
+    if rows:
+        return [row_to_dict(row) for row in rows]
+    text = " ".join(
+        str(scene.get(key) or "")
+        for key in ("heading", "action", "dialog", "creative_direction")
+    ).casefold()
+    return [
+        row_to_dict(row)
+        for row in conn.execute(
+            "SELECT * FROM characters WHERE project_id = ? ORDER BY id ASC",
+            (scene["project_id"],),
+        ).fetchall()
+        if row["name"].casefold() in text
+    ]
+
+
 def _save_prompt_draft(
     conn: sqlite3.Connection,
     scene: dict[str, Any],
@@ -249,15 +275,7 @@ async def preview_scene_prompt(
         if not row:
             raise ValueError(f"Scene {scene_id} not found in project {project_id}")
         scene = row_to_dict(row)
-        char_rows = conn.execute(
-            """
-            SELECT c.* FROM characters c
-            JOIN scene_characters sc ON sc.character_id = c.id
-            WHERE sc.scene_id = ?
-            """,
-            (scene_id,),
-        ).fetchall()
-        characters = [row_to_dict(r) for r in char_rows]
+        characters = _load_scene_characters(conn, scene)
         loc_image = scene.get("env_image_path")
         loc_row: dict[str, Any] | None = None
         if scene.get("location_id"):
@@ -381,16 +399,7 @@ async def enqueue_video_jobs(
             inputs = parse_dynamic_inputs(workflow_json) if workflow_json else []
             duration = scene.get("duration_sec")
 
-            char_rows = conn.execute(
-                """
-                SELECT c.* FROM characters c
-                JOIN scene_characters sc ON sc.character_id = c.id
-                WHERE sc.scene_id = ?
-                ORDER BY sc.rowid ASC
-                """,
-                (scene["id"],),
-            ).fetchall()
-            characters = [row_to_dict(r) for r in char_rows]
+            characters = _load_scene_characters(conn, scene)
             loc_image = scene.get("env_image_path")
             loc_row: dict[str, Any] | None = None
             if scene.get("location_id"):

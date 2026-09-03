@@ -20,8 +20,42 @@ def _persist_scenes(
     scenes: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     created: list[dict[str, Any]] = []
+    project_characters = conn.execute(
+        "SELECT id, name FROM characters WHERE project_id = ?", (project_id,)
+    ).fetchall()
+    project_locations = conn.execute(
+        "SELECT id, name FROM locations WHERE project_id = ?", (project_id,)
+    ).fetchall()
     for scene in scenes:
+        scene_text = " ".join(
+            str(scene.get(key) or "")
+            for key in ("heading", "action", "dialog", "creative_direction")
+        ).casefold()
+        character_ids = [
+            row["id"]
+            for row in project_characters
+            if row["id"] in (scene.get("character_ids") or [])
+        ]
+        if not character_ids:
+            names = {str(name).casefold() for name in (scene.get("character_names") or [])}
+            character_ids = [
+                row["id"]
+                for row in project_characters
+                if row["name"].casefold() in names or row["name"].casefold() in scene_text
+            ]
         loc_id = scene.get("location_id")
+        if not any(row["id"] == loc_id for row in project_locations):
+            location_name = str(scene.get("location_name") or "").casefold()
+            match = next(
+                (
+                    row
+                    for row in project_locations
+                    if row["name"].casefold() == location_name
+                    or row["name"].casefold() in scene_text
+                ),
+                None,
+            )
+            loc_id = match["id"] if match else None
         env_path = None
         if loc_id:
             loc = conn.execute(
@@ -53,16 +87,11 @@ def _persist_scenes(
             ),
         )
         scene_id = cur.lastrowid
-        for cid in scene.get("character_ids") or []:
-            exists = conn.execute(
-                "SELECT id FROM characters WHERE id = ? AND project_id = ?",
-                (cid, project_id),
-            ).fetchone()
-            if exists:
-                conn.execute(
-                    "INSERT OR IGNORE INTO scene_characters (scene_id, character_id) VALUES (?, ?)",
-                    (scene_id, cid),
-                )
+        for cid in character_ids:
+            conn.execute(
+                "INSERT OR IGNORE INTO scene_characters (scene_id, character_id) VALUES (?, ?)",
+                (scene_id, cid),
+            )
         row = conn.execute("SELECT * FROM scenes WHERE id = ?", (scene_id,)).fetchone()
         created.append(row_to_dict(row))
     return created

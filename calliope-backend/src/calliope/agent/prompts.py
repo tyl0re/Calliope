@@ -257,6 +257,8 @@ Respond ONLY with JSON:
       "duration_sec": 5,
       "creative_direction": "Optional scene-specific visual direction, or an empty string",
       "character_ids": [1],
+      "character_names": ["MIA"],
+      "location_name": "Location name or an empty string",
       "location_id": 1
     }}
   ]
