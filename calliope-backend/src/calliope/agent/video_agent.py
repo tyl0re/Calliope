@@ -178,6 +178,7 @@ def _find_workflow_for_reference_count(
     rows = conn.execute(
         "SELECT * FROM workflows WHERE kind = 'video' AND is_enabled = 1 ORDER BY id ASC"
     ).fetchall()
+    text_words = {word.strip(".,:;()[]{}\"") for word in text.split()}
     candidates = []
     for row in rows:
         workflow = row_to_dict(row)
@@ -237,7 +238,31 @@ def _load_scene_items(conn: sqlite3.Connection, scene: dict[str, Any]) -> list[d
         """,
         (scene["id"],),
     ).fetchall()
-    return [row_to_dict(row) for row in rows]
+    if rows:
+        return [row_to_dict(row) for row in rows]
+    text = " ".join(
+        str(scene.get(key) or "")
+        for key in ("heading", "action", "dialog", "creative_direction", "video_settings_json")
+    ).casefold()
+    candidates = []
+    for row in conn.execute(
+        "SELECT * FROM items WHERE project_id = ? ORDER BY id ASC", (scene["project_id"],)
+    ).fetchall():
+        words = {
+            word.strip(".,:;()[]{}\"")
+            for word in f"{row['name']} {row['description'] or ''}".casefold().split()
+            if len(word.strip(".,:;()[]{}\"")) >= 5
+        }
+        if row["reference_image_path"] and len(words.intersection(text_words)) >= 2:
+            candidates.append(row)
+    if candidates:
+        for row in candidates:
+            conn.execute(
+                "INSERT OR IGNORE INTO scene_items (scene_id, item_id) VALUES (?, ?)",
+                (scene["id"], row["id"]),
+            )
+        conn.commit()
+    return [row_to_dict(row) for row in candidates]
 
 
 def _save_prompt_draft(
