@@ -9,6 +9,7 @@ export interface Project {
 	genre: string | null;
 	tone: string | null;
 	target_duration: string | null;
+	script_instructions: string | null;
 	cover_path: string | null;
 	status: string;
 	created_at: string;
@@ -29,6 +30,7 @@ export interface ProjectCreate {
 	genre?: string;
 	tone?: string;
 	target_duration?: string;
+	script_instructions?: string;
 }
 
 export interface Beat {

@@ -81,8 +81,8 @@ async def create_scene(project_id: int, payload: SceneCreate) -> dict[str, Any]:
             """
             INSERT INTO scenes
             (project_id, beat_id, order_index, heading, action, dialog, duration_sec,
-             workflow_id, env_image_path, location_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             workflow_id, env_image_path, location_id, creative_direction)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 project_id,
@@ -95,6 +95,7 @@ async def create_scene(project_id: int, payload: SceneCreate) -> dict[str, Any]:
                 payload.workflow_id,
                 payload.env_image_path,
                 payload.location_id,
+                payload.creative_direction,
             ),
         )
         scene_id = cur.lastrowid

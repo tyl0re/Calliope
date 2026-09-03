@@ -168,6 +168,7 @@ def build_script_messages(
     characters: list[dict[str, Any]],
     locations: list[dict[str, Any]],
     target_duration: str | None,
+    script_instructions: str | None = None,
     scene_count: int | None = None,
     min_scene_duration_sec: int = 4,
     max_scene_duration_sec: int = 15,
@@ -207,6 +208,9 @@ Characters:
 
 Locations:
 {loc_lines or '(none)'}
+
+Additional script instructions:
+{script_instructions or '(none)'}
 
 === HARD CONSTRAINTS (non-negotiable) ===
 1. The JSON field "scenes" MUST contain EXACTLY {scene_n} objects.
@@ -251,6 +255,7 @@ Respond ONLY with JSON:
       "action": "Wide establishing shot, slow push-in through the cracked main doorway. MIA, a teenage girl with a chestnut ponytail and yellow rain jacket, steps into the dusty main hall, lantern held high, its warm glow catching drifting dust motes around her cautious, widening eyes. She freezes mid-step, fingers tightening on the lantern handle as she looks up. Overturned desks and a collapsed chalkboard fill the frame; moonlight cuts through shattered windows in pale blue shafts. The mood is hushed and uneasy, shadows pooling at the edges of the lantern light.",
       "dialog": "MIA (whispering): line\\nNARRATOR: line",
       "duration_sec": 5,
+      "creative_direction": "Optional scene-specific visual direction, or an empty string",
       "character_ids": [1],
       "location_id": 1
     }}
@@ -367,6 +372,9 @@ def scene_video_prompt(scene: dict[str, Any], characters: list[dict[str, Any]]) 
     parts = [
         scene.get("heading") or "",
         scene.get("action") or "",
+        f"creative direction: {scene.get('creative_direction')}"
+        if scene.get("creative_direction")
+        else "",
         f"featuring {char_bits}" if char_bits else "",
         "cinematic motion, coherent continuity",
     ]
@@ -449,6 +457,9 @@ Action (visual base for detailed_description):
 Dialogue (raw 'SPEAKER: line' format; optional '(delivery cue)' after the speaker —
 map speakers to subjects by name and keep cues as delivery direction):
 {scene.get('dialog') or '(none)'}
+
+Scene-specific creative direction:
+{scene.get('creative_direction') or '(none)'}
 
 Referenced subjects (keep these exact indices):
 {roster}

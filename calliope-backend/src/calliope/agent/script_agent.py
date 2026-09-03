@@ -36,9 +36,9 @@ def _persist_scenes(
             INSERT INTO scenes
             (
                 project_id, order_index, heading, action, dialog, duration_sec,
-                location_id, env_image_path
+                location_id, env_image_path, creative_direction
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 project_id,
@@ -49,6 +49,7 @@ def _persist_scenes(
                 scene.get("duration_sec"),
                 loc_id,
                 env_path,
+                scene.get("creative_direction"),
             ),
         )
         scene_id = cur.lastrowid
@@ -170,6 +171,7 @@ async def generate_script(
             characters=characters,
             locations=locations,
             target_duration=p.get("target_duration"),
+            script_instructions=p.get("script_instructions"),
             scene_count=required_scenes,
             min_scene_duration_sec=settings.script_min_scene_duration_sec,
             max_scene_duration_sec=settings.script_max_scene_duration_sec,

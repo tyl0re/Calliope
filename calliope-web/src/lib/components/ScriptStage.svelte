@@ -86,6 +86,7 @@
 			projects.updateScene(projectId, editing!.id, {
 				heading: editing!.heading,
 				action: editing!.action,
+				creative_direction: editing!.creative_direction,
 				dialog: editing!.dialog,
 				duration_sec: editing!.duration_sec,
 			}),
@@ -472,6 +473,15 @@
 				bind:value={editing.dialog}
 				rows="4"
 				placeholder="CHARACTER&#10;Line…"
+			></textarea>
+		</label>
+		<label class="field">
+			<span class="field-label">Creative direction (optional)</span>
+			<textarea
+				class="field-textarea"
+				bind:value={editing.creative_direction}
+				rows="3"
+				placeholder="Make this scene very dark, with slow camera movement and deep shadows."
 			></textarea>
 		</label>
 		<label class="field">

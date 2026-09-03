@@ -75,6 +75,7 @@
 	let addingBeat = $state(false);
 	// Static defaults — the $effect below syncs all drafts from the story prop.
 	let ideaDraft = $state('');
+	let scriptInstructionsDraft = $state('');
 	let genreDraft = $state(GENRES[0]);
 	let toneDraft = $state(TONES[0]);
 	let lengthDraft = $state('2 minutes');
@@ -102,6 +103,7 @@
 	$effect(() => {
 		if (draftProjectId === projectId) return;
 		ideaDraft = story.project.idea ?? '';
+		scriptInstructionsDraft = story.project.script_instructions ?? '';
 		genreDraft = story.project.genre || GENRES[0];
 		toneDraft = story.project.tone || TONES[0];
 		lengthDraft = story.project.target_duration || '2 minutes';
@@ -133,6 +135,7 @@
 			genre?: string;
 			tone?: string;
 			target_duration?: string;
+			script_instructions?: string;
 		}) => projects.update(projectId, payload),
 		onMutate: () => {
 			saveState = 'saving';
@@ -170,6 +173,7 @@
 				genre: genreDraft || undefined,
 				tone: toneDraft || undefined,
 				target_duration: lengthDraft || undefined,
+				script_instructions: scriptInstructionsDraft || undefined,
 			});
 			return true;
 		} catch {
@@ -401,6 +405,22 @@
 		oninput={scheduleSettingsSave}
 		onblur={() => void persistSettings()}
 	></textarea>
+</Card>
+
+<Card>
+	{#snippet header()}
+		<h3 class="card-h">Script instructions</h3>
+		<span class="muted small">Optional global guidance</span>
+	{/snippet}
+	<textarea
+		class="field-textarea"
+		bind:value={scriptInstructionsDraft}
+		rows="4"
+		placeholder="Use more dialogue. Make the final reveal very dark. Keep the grandmother's box important."
+		oninput={scheduleSettingsSave}
+		onblur={() => void persistSettings()}
+	></textarea>
+	<p class="field-hint">These instructions are included when the Script LLM creates beats and scenes.</p>
 </Card>
 
 <Card>

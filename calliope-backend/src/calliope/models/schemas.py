@@ -12,6 +12,7 @@ class ProjectCreate(BaseModel):
     genre: str | None = None
     tone: str | None = None
     target_duration: str | None = None
+    script_instructions: str | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -20,6 +21,7 @@ class ProjectUpdate(BaseModel):
     genre: str | None = None
     tone: str | None = None
     target_duration: str | None = None
+    script_instructions: str | None = None
     cover_path: str | None = None
     status: str | None = None
 
@@ -126,6 +128,7 @@ class SceneCreate(BaseModel):
     beat_id: int | None = None
     character_ids: list[int] = Field(default_factory=list)
     location_id: int | None = None
+    creative_direction: str | None = None
 
 
 class SceneUpdate(BaseModel):
@@ -144,6 +147,7 @@ class SceneUpdate(BaseModel):
     # Persisted video-stage setup: form input_values, clip source, prompt
     # draft + metadata. Serialized into scenes.video_settings_json.
     video_settings: dict[str, Any] | None = None
+    creative_direction: str | None = None
 
 
 class SceneReorder(BaseModel):

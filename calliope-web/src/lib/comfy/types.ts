@@ -70,6 +70,7 @@ export interface Scene {
 	heading: string | null;
 	action: string | null;
 	dialog: string | null;
+	creative_direction: string | null;
 	duration_sec: number | null;
 	workflow_id: number | null;
 	env_image_path: string | null;
