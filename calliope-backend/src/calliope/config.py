@@ -337,7 +337,6 @@ class Settings(BaseSettings):
             "agent_max_steps": self.agent_max_steps,
             "script_min_scene_duration_sec": self.script_min_scene_duration_sec,
             "script_max_scene_duration_sec": self.script_max_scene_duration_sec,
-            "script_target_scene_duration_sec": self.script_target_scene_duration_sec,
             "agent_hardening_prompt": self.agent_hardening_prompt,
             "dry_run": bool(self.dry_run),
         }

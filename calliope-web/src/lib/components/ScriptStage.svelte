@@ -102,12 +102,14 @@
 
 	// Chain-from-previous toggle — persists on the scene; consumed at render time.
 	let chainPendingId = $state<number | null>(null);
-	async function toggleChain(scene: Scene) {
+	let assetLinkPendingId = $state<number | null>(null);
+	async function setChain(scene: Scene, enabled: boolean) {
 		if (chainPendingId != null) return;
+		if (Boolean(scene.chain_from_prev) === enabled) return;
 		chainPendingId = scene.id;
 		try {
 			await projects.updateScene(projectId, scene.id, {
-				chain_from_prev: !scene.chain_from_prev,
+				chain_from_prev: enabled,
 			});
 			await client.invalidateQueries({ queryKey: ['scenes'] });
 		} catch (err) {
@@ -192,6 +194,19 @@
 			return;
 		}
 		$regenerateMutation.mutate();
+	}
+
+	async function updateSceneAssets(scene: Scene, characterIds: number[], locationId: number | null) {
+		if (assetLinkPendingId != null) return;
+		assetLinkPendingId = scene.id;
+		try {
+			await projects.updateScene(projectId, scene.id, { character_ids: characterIds, location_id: locationId });
+			await client.invalidateQueries({ queryKey: ['scenes'] });
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Could not update scene assets');
+		} finally {
+			assetLinkPendingId = null;
+		}
 	}
 
 	function goToVideo() {
@@ -390,26 +405,40 @@
 								{/if}
 							</span>
 							{c.name}
+							<button
+								type="button"
+								class="chip-remove"
+								aria-label={`Remove ${c.name} from scene`}
+								disabled={assetLinkPendingId === scene.id}
+								onclick={() => updateSceneAssets(scene, (scene.character_ids ?? []).filter((id) => id !== c.id), scene.location_id)}
+							>
+								×
+							</button>
 						</span>
 					{/each}
+					<select class="asset-select" aria-label="Add character to scene" disabled={assetLinkPendingId === scene.id} onchange={(event) => { const id = Number(event.currentTarget.value); if (id) updateSceneAssets(scene, [...(scene.character_ids ?? []), id], scene.location_id); event.currentTarget.value = ''; }}>
+						<option value="">+ Character</option>
+						{#each ($assetsQuery.data?.characters ?? []).filter((c) => !(scene.character_ids ?? []).includes(c.id)) as c (c.id)}
+							<option value={c.id}>{c.name}</option>
+						{/each}
+					</select>
 					{#if locName}
-						<span class="chip"><Icon name="folder" size={12} /> {locName}</span>
+						<span class="chip"><Icon name="folder" size={12} /> {locName}<button type="button" class="chip-remove" aria-label="Remove location from scene" disabled={assetLinkPendingId === scene.id} onclick={() => updateSceneAssets(scene, scene.character_ids ?? [], null)}>×</button></span>
 					{/if}
+					<select class="asset-select" aria-label="Set scene location" disabled={assetLinkPendingId === scene.id} onchange={(event) => updateSceneAssets(scene, scene.character_ids ?? [], event.currentTarget.value ? Number(event.currentTarget.value) : null)}>
+						<option value="">{locName ? 'Change location' : '+ Location'}</option>
+						{#each ($assetsQuery.data?.locations ?? []) as location (location.id)}
+							<option value={location.id}>{location.name}</option>
+						{/each}
+					</select>
 					{#if scene.duration_sec}
 						<span class="chip"><Icon name="clock" size={12} /> {formatClock(scene.duration_sec)}</span>
 					{/if}
 					{#if i > 0}
-						<button
-							type="button"
-							class="chip chip-toggle"
-							class:chip-on={Boolean(scene.chain_from_prev)}
-							disabled={chainPendingId === scene.id}
-						title="This scene's clip continues from a previous video (Extend-style). Requires a workflow with a video input; pick the source clip in the Video stage."
-						onclick={() => toggleChain(scene)}
-					>
-						<Icon name="film" size={12} />
-						{Boolean(scene.chain_from_prev) ? 'Continues from previous video' : 'Continue from previous video'}
-						</button>
+						<select class="asset-select" aria-label="Continuation mode" value={scene.chain_from_prev ? 'continue' : 'new'} disabled={chainPendingId === scene.id} onchange={(event) => setChain(scene, event.currentTarget.value === 'continue')}>
+							<option value="new">New clip</option>
+							<option value="continue">Continue from previous video</option>
+						</select>
 					{/if}
 				</div>
 			</article>
@@ -642,22 +671,27 @@
 		font-size: 12px;
 		color: var(--text-secondary);
 	}
-	.chip-toggle {
+	.chip-remove {
+		border: 0;
+		padding: 0;
+		background: transparent;
+		color: var(--text-muted);
 		cursor: pointer;
-		font-family: inherit;
+		font-size: 14px;
+		line-height: 1;
 	}
-	.chip-toggle:hover {
-		color: var(--text-primary);
-		border-color: #52525b;
+	.chip-remove:hover {
+		color: var(--danger);
 	}
-	.chip-toggle:disabled {
-		opacity: 0.6;
-		cursor: wait;
-	}
-	.chip-on {
-		color: var(--accent);
-		border-color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+	.asset-select {
+		max-width: 190px;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		padding: 3px 8px;
+		background: var(--bg-elevated);
+		color: var(--text-secondary);
+		font: inherit;
+		font-size: 12px;
 	}
 	.avatar {
 		position: relative;

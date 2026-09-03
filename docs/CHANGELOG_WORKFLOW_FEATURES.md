@@ -28,6 +28,8 @@ Script regeneration no longer preserves an accidentally oversized existing board
 
 The script prompt now asks the LLM for editorial durations inside the configurable min/max range based on action complexity, dialogue, reveals, reactions, and transitions. The default range is 4–30 seconds, with no forced target average. Scene-count recommendations use the midpoint of the configured range, while normalization preserves the LLM's relative recommendations and fits the project's target runtime.
 
+Script scene cards expose current character and location links as editable controls. Existing assets can be added or removed without regenerating the script, and the continuation mode is a persisted `New clip`/`Continue from previous video` choice used by subsequent video generation.
+
 ## Post-Render Video Prompt Editing
 
 The Video stage keeps the prompt and input payload for each render job. After a clip has been rendered, contributors can open **View prompt & inputs**, select a job from the scene history, choose **Edit prompt**, and regenerate with a revised prompt. Saving the revised prompt updates the scene draft so future generations reuse it. The separate **Regenerate** action forces a fresh LLM rewrite instead of returning the existing draft.

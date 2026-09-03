@@ -55,7 +55,9 @@ async def list_scenes(project_id: int) -> dict[str, Any]:
 
 
 @router.post("/{project_id}/generate-script")
-async def generate_script_endpoint(project_id: int, payload: GenerateScenesRequest | None = None) -> dict[str, Any]:
+async def generate_script_endpoint(
+    project_id: int, payload: GenerateScenesRequest | None = None
+) -> dict[str, Any]:
     replace = True if payload is None else payload.replace
     scene_count = None if payload is None else payload.scene_count
     try:
@@ -120,10 +122,14 @@ async def update_scene(project_id: int, scene_id: int, payload: SceneUpdate) -> 
             raise HTTPException(status_code=404, detail="Scene not found")
         data = payload.model_dump(exclude_unset=True)
         char_ids = data.pop("character_ids", None)
+        location_is_set = "location_id" in data
+        location_id = data.pop("location_id", None)
         # video_settings arrives as a dict — the generic UPDATE path below only
         # handles scalars, so serialize it into its JSON column (or NULL it).
         video_settings = data.pop("video_settings", None)
         data = {k: v for k, v in data.items() if v is not None}
+        if location_is_set:
+            data["location_id"] = location_id
         if data:
             fields = ", ".join(f"{k} = :{k}" for k in data)
             data["id"] = scene_id
