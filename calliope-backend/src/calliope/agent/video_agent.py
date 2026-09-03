@@ -34,6 +34,7 @@ def _h3_subjects(
     characters: list[dict[str, Any]],
     location: dict[str, Any] | None,
     loc_image: str | None,
+    items: list[dict[str, Any]],
     inputs: list[dict[str, Any]],
     include_all: bool = False,
 ) -> tuple[list[dict[str, Any]], list[str]]:
@@ -69,6 +70,19 @@ def _h3_subjects(
             }
         )
         paths.append(loc_image)
+    for item in items:
+        image = item.get("reference_image_path")
+        if not image:
+            continue
+        subjects.append(
+            {
+                "index": len(subjects) + 1,
+                "kind": "item",
+                "name": item.get("name"),
+                "appearance": item.get("description") or "",
+            }
+        )
+        paths.append(image)
     cap = len(ref_image_slots(inputs))
     if include_all:
         return subjects, paths
@@ -215,6 +229,17 @@ def _load_scene_characters(conn: sqlite3.Connection, scene: dict[str, Any]) -> l
     ]
 
 
+def _load_scene_items(conn: sqlite3.Connection, scene: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT i.* FROM items i JOIN scene_items si ON si.item_id = i.id
+        WHERE si.scene_id = ? ORDER BY si.rowid ASC
+        """,
+        (scene["id"],),
+    ).fetchall()
+    return [row_to_dict(row) for row in rows]
+
+
 def _save_prompt_draft(
     conn: sqlite3.Connection,
     scene: dict[str, Any],
@@ -279,6 +304,7 @@ async def preview_scene_prompt(
             raise ValueError(f"Scene {scene_id} not found in project {project_id}")
         scene = row_to_dict(row)
         characters = _load_scene_characters(conn, scene)
+        items = _load_scene_items(conn, scene)
         loc_image = scene.get("env_image_path")
         loc_row: dict[str, Any] | None = None
         if scene.get("location_id"):
@@ -304,7 +330,7 @@ async def preview_scene_prompt(
 
     if profile == "minimax_h3_ref":
         current_subjects, current_paths = _h3_subjects(
-            characters, loc_row, loc_image, inputs, include_all=True
+            characters, loc_row, loc_image, items, inputs, include_all=True
         )
         required_refs = sum(1 for item in inputs if item.get("role") == "image")
         if (required_refs > 0 and len(current_paths) != required_refs) or (
@@ -335,7 +361,7 @@ async def preview_scene_prompt(
                     "from_draft": True,
                     "based_on": based_on,
                 }
-        subjects, _ = _h3_subjects(characters, loc_row, loc_image, inputs)
+        subjects, _ = _h3_subjects(characters, loc_row, loc_image, items, inputs)
         await event_bus.publish(
             "agent.thinking",
             {
@@ -424,6 +450,7 @@ async def enqueue_video_jobs(
             duration = scene.get("duration_sec")
 
             characters = _load_scene_characters(conn, scene)
+            items = _load_scene_items(conn, scene)
             loc_image = scene.get("env_image_path")
             loc_row: dict[str, Any] | None = None
             if scene.get("location_id"):
@@ -448,7 +475,7 @@ async def enqueue_video_jobs(
                 )
             if profile == "minimax_h3_ref":
                 subjects, ref_paths = _h3_subjects(
-                    characters, loc_row, loc_image, inputs, include_all=True
+                    characters, loc_row, loc_image, items, inputs, include_all=True
                 )
                 required_refs = sum(1 for item in inputs if item.get("role") == "image")
                 if (required_refs > 0 and len(ref_paths) != required_refs) or (
@@ -461,7 +488,7 @@ async def enqueue_video_jobs(
                         inputs = parse_dynamic_inputs(_workflow_json(workflow))
                         profile = workflow.get("prompt_profile") or "prose"
                         subjects, ref_paths = _h3_subjects(
-                            characters, loc_row, loc_image, inputs
+                            characters, loc_row, loc_image, items, inputs
                         )
                         conn.execute(
                             "UPDATE scenes SET workflow_id = ? WHERE id = ?",
@@ -512,7 +539,7 @@ async def enqueue_video_jobs(
                 prompt = (prompts or {}).get(scene["id"]) or scene_video_prompt(
                     scene, characters
                 )
-                _, ref_paths = _h3_subjects(characters, loc_row, loc_image, inputs)
+                _, ref_paths = _h3_subjects(characters, loc_row, loc_image, items, inputs)
                 values = smart_fill_inputs(
                     inputs,
                     prompt=prompt,

@@ -30,6 +30,8 @@ The script prompt now asks the LLM for editorial durations inside the configurab
 
 Script scene cards expose current character and location links as editable controls. Existing assets can be added or removed without regenerating the script, and the continuation mode is a persisted `New clip`/`Continue from previous video` choice used by subsequent video generation.
 
+Scene asset links also include Items. Item images and descriptions participate in H3 reference ordering, so an explicitly linked object can become `<Subject N>` instead of remaining only text in the scene prompt. H3 templates currently support up to five image references; larger sets are rejected or require a workflow with additional slots.
+
 ## Post-Render Video Prompt Editing
 
 The Video stage keeps the prompt and input payload for each render job. After a clip has been rendered, contributors can open **View prompt & inputs**, select a job from the scene history, choose **Edit prompt**, and regenerate with a revised prompt. Saving the revised prompt updates the scene draft so future generations reuse it. The separate **Regenerate** action forces a fresh LLM rewrite instead of returning the existing draft.
