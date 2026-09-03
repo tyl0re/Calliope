@@ -91,6 +91,7 @@
 	let createAge = $state('');
 	let createAppearance = $state('');
 	let createPersonality = $state('');
+	let nameDrafts = $state<Record<string, string>>({});
 
 	const assetsQuery = createQuery(
 		toStore(() => ({
@@ -469,6 +470,14 @@
 		drafts = { ...drafts, [key]: value };
 	}
 
+	function nameFor(key: string, fallback: string): string {
+		return nameDrafts[key] ?? fallback;
+	}
+
+	function setNameDraft(key: string, value: string) {
+		nameDrafts = { ...nameDrafts, [key]: value };
+	}
+
 	function negativeFor(key: string, fallback = ''): string {
 		return negativeDrafts[key] ?? fallback;
 	}
@@ -626,6 +635,7 @@
 		const prompt = sheetHasPrompt ? promptForChar(c) : '';
 		if (sheetHasPrompt) {
 			await projects.updateCharacter(projectId, c.id, {
+				name: nameFor(charKey(c.id), c.name),
 				consistency_prompt: prompt,
 				negative_prompt: negativeFor(charKey(c.id), c.negative_prompt ?? ''),
 			});
@@ -657,6 +667,7 @@
 		const prompt = envHasPrompt ? promptForLoc(loc) : '';
 		if (envHasPrompt) {
 			await projects.updateLocation(projectId, loc.id, {
+				name: nameFor(locKey(loc.id), loc.name),
 				consistency_prompt: prompt,
 				negative_prompt: negativeFor(locKey(loc.id), loc.negative_prompt ?? ''),
 			});
@@ -687,6 +698,7 @@
 		const prompt = itemHasPrompt ? promptForItem(item) : '';
 		if (itemHasPrompt) {
 			await projects.updateItem(projectId, item.id, {
+				name: nameFor(itemKey(item.id), item.name),
 				consistency_prompt: prompt,
 				negative_prompt: negativeFor(itemKey(item.id), item.negative_prompt ?? ''),
 			});
@@ -1201,6 +1213,7 @@
 							{#if showCharPrompt}
 								<details class="prompt-fold">
 									<summary>Edit image prompt</summary>
+									<label class="prompt-field"><span class="field-label">Asset name</span><input class="field-input" value={nameFor(key, char.name)} oninput={(e) => setNameDraft(key, e.currentTarget.value)} /></label>
 									<label class="prompt-field">
 										<span class="field-label">Sent to ComfyUI on generate</span>
 										<textarea
@@ -1410,6 +1423,7 @@
 							{#if envHasPrompt}
 								<details class="prompt-fold">
 									<summary>Edit image prompt</summary>
+									<label class="prompt-field"><span class="field-label">Asset name</span><input class="field-input" value={nameFor(key, loc.name)} oninput={(e) => setNameDraft(key, e.currentTarget.value)} /></label>
 									<label class="prompt-field">
 										<span class="field-label">Sent to ComfyUI on generate</span>
 										<textarea
@@ -1619,6 +1633,7 @@
 							{#if itemHasPrompt}
 								<details class="prompt-fold">
 									<summary>Edit image prompt</summary>
+									<label class="prompt-field"><span class="field-label">Asset name</span><input class="field-input" value={nameFor(key, item.name)} oninput={(e) => setNameDraft(key, e.currentTarget.value)} /></label>
 									<label class="prompt-field">
 										<span class="field-label">Sent to ComfyUI on generate</span>
 										<textarea
