@@ -4,7 +4,11 @@ from __future__ import annotations
 from typing import Any
 
 from calliope.agent.llm import generate_structured
-from calliope.agent.prompts import build_script_messages, recommend_scene_count
+from calliope.agent.prompts import (
+    build_script_messages,
+    estimate_target_seconds,
+    recommend_scene_count,
+)
 from calliope.config import settings
 from calliope.db import get_db, row_to_dict
 from calliope.events.bus import event_bus
@@ -30,8 +34,11 @@ def _persist_scenes(
         cur = conn.execute(
             """
             INSERT INTO scenes
-            (project_id, order_index, heading, action, dialog, duration_sec, location_id, env_image_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (
+                project_id, order_index, heading, action, dialog, duration_sec,
+                location_id, env_image_path, creative_direction
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 project_id,
@@ -42,6 +49,7 @@ def _persist_scenes(
                 scene.get("duration_sec"),
                 loc_id,
                 env_path,
+                scene.get("creative_direction"),
             ),
         )
         scene_id = cur.lastrowid
@@ -58,6 +66,43 @@ def _persist_scenes(
         row = conn.execute("SELECT * FROM scenes WHERE id = ?", (scene_id,)).fetchone()
         created.append(row_to_dict(row))
     return created
+
+
+def _normalize_scene_durations(
+    scenes: list[dict[str, Any]],
+    total_seconds: int,
+    min_duration: int = 4,
+    max_duration: int = 15,
+) -> None:
+    if not scenes:
+        return
+    min_duration = max(1, min(min_duration, max_duration))
+    max_duration = max(min_duration, max_duration)
+    target = max(total_seconds, len(scenes) * min_duration)
+    raw: list[int] = []
+    for scene in scenes:
+        try:
+            value = int(float(scene.get("duration_sec") or 6))
+        except (TypeError, ValueError):
+            value = 6
+        raw.append(max(min_duration, min(max_duration, value)))
+    raw_total = sum(raw)
+    durations = [
+        max(min_duration, min(max_duration, round(value * target / raw_total)))
+        for value in raw
+    ]
+    while sum(durations) < target:
+        index = max(range(len(durations)), key=lambda i: (raw[i], -i))
+        if durations[index] == max_duration:
+            break
+        durations[index] += 1
+    while sum(durations) > target:
+        index = max(range(len(durations)), key=lambda i: (durations[i], raw[i], -i))
+        if durations[index] == min_duration:
+            break
+        durations[index] -= 1
+    for scene, duration in zip(scenes, durations):
+        scene["duration_sec"] = duration
 
 
 async def generate_script(
@@ -99,9 +144,15 @@ async def generate_script(
             "SELECT COUNT(*) AS n FROM scenes WHERE project_id = ?",
             (project_id,),
         ).fetchone()["n"]
-        recommended = recommend_scene_count(p.get("target_duration"))
+        recommended = recommend_scene_count(
+            p.get("target_duration"),
+            settings.script_min_scene_duration_sec,
+            settings.script_max_scene_duration_sec,
+        )
         # Prefer explicit request, else keep at least the board the user already built
-        requested = scene_count if scene_count and scene_count > 0 else existing_n
+        requested = (
+            scene_count if scene_count and scene_count > 0 else existing_n if not replace else 0
+        )
         required_scenes = max(recommended, int(requested)) if requested else recommended
 
         await event_bus.publish(
@@ -120,7 +171,10 @@ async def generate_script(
             characters=characters,
             locations=locations,
             target_duration=p.get("target_duration"),
+            script_instructions=p.get("script_instructions"),
             scene_count=required_scenes,
+            min_scene_duration_sec=settings.script_min_scene_duration_sec,
+            max_scene_duration_sec=settings.script_max_scene_duration_sec,
         )
         result = await generate_structured(messages, temperature=0.7)
         scenes_out = result.get("scenes") or []
@@ -151,9 +205,17 @@ async def generate_script(
             scenes_out = result.get("scenes") or []
             if len(scenes_out) < required_scenes:
                 raise ValueError(
-                    f"Script returned {len(scenes_out)} scenes but {required_scenes} were required. "
+                    f"Script returned {len(scenes_out)} scenes but {required_scenes} were "
+                    "required. "
                     "Add scenes again and retry, or raise target duration."
                 )
+
+        _normalize_scene_durations(
+            scenes_out,
+            estimate_target_seconds(p.get("target_duration")),
+            settings.script_min_scene_duration_sec,
+            settings.script_max_scene_duration_sec,
+        )
 
         if replace:
             scene_ids = [
@@ -169,7 +231,8 @@ async def generate_script(
         created = _persist_scenes(conn, project_id, scenes_out)
 
         conn.execute(
-            "UPDATE projects SET status = 'in_progress', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE projects SET status = 'in_progress', "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (project_id,),
         )
         conn.commit()

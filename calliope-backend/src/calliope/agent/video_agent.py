@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,10 @@ from calliope.events.bus import event_bus
 from calliope.queue.manager import queue_manager
 
 logger = logging.getLogger("calliope.video_agent")
+
+
+def _clip_label(scene: dict[str, Any]) -> str:
+    return f"Clip #{scene.get('order_index')} · {scene.get('heading') or 'Untitled'}"
 
 
 def _h3_subjects(
@@ -48,7 +53,7 @@ def _h3_subjects(
                 "index": len(subjects) + 1,
                 "kind": "character",
                 "name": c.get("name"),
-                "appearance": c.get("consistency_prompt") or c.get("appearance") or "",
+                "appearance": c.get("appearance") or c.get("consistency_prompt") or "",
             }
         )
         paths.append(img)
@@ -59,7 +64,7 @@ def _h3_subjects(
                 "index": len(subjects) + 1,
                 "kind": "location",
                 "name": loc.get("name"),
-                "appearance": loc.get("consistency_prompt") or loc.get("description") or "",
+                "appearance": loc.get("description") or loc.get("consistency_prompt") or "",
             }
         )
         paths.append(loc_image)
@@ -111,15 +116,12 @@ def _previous_clip(
     row = conn.execute(
         """
         SELECT video_path FROM scenes
-        WHERE project_id = ? AND order_index < ? AND video_path IS NOT NULL
+        WHERE project_id = ? AND order_index < ?
         ORDER BY order_index DESC LIMIT 1
         """,
         (project_id, order_index),
     ).fetchone()
-    has_earlier = conn.execute(
-        "SELECT 1 FROM scenes WHERE project_id = ? AND order_index < ? LIMIT 1",
-        (project_id, order_index),
-    ).fetchone() is not None
+    has_earlier = row is not None
     path = row["video_path"] if row else None
     if path and Path(path).exists():
         return path, has_earlier
@@ -140,17 +142,14 @@ def _get_workflow(workflow_id: int | None = None) -> dict[str, Any] | None:
     try:
         if workflow_id:
             row = conn.execute(
-                "SELECT * FROM workflows WHERE id = ? AND is_enabled = 1", (workflow_id,)
+                "SELECT * FROM workflows WHERE id = ? AND kind = 'video' AND is_enabled = 1",
+                (workflow_id,),
             ).fetchone()
         else:
             row = conn.execute(
                 "SELECT * FROM workflows WHERE kind = 'video' AND is_enabled = 1 "
                 "ORDER BY id ASC LIMIT 1"
             ).fetchone()
-            if not row:
-                row = conn.execute(
-                    "SELECT * FROM workflows WHERE is_enabled = 1 ORDER BY id ASC LIMIT 1"
-                ).fetchone()
         return row_to_dict(row) if row else None
     finally:
         conn.close()
@@ -166,6 +165,26 @@ def _scene_video_settings(scene: dict[str, Any]) -> dict[str, Any]:
     except (json.JSONDecodeError, TypeError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _save_prompt_draft(
+    conn: sqlite3.Connection,
+    scene: dict[str, Any],
+    workflow_id: int | None,
+    prompt: str,
+) -> None:
+    settings = _scene_video_settings(scene)
+    settings["prompt_draft"] = prompt
+    settings["prompt_draft_meta"] = {
+        "based_on": _scene_prompt_hash(scene),
+        "workflow_id": workflow_id,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    scene["video_settings_json"] = json.dumps(settings)
+    conn.execute(
+        "UPDATE scenes SET video_settings_json = ? WHERE id = ?",
+        (scene["video_settings_json"], scene["id"]),
+    )
 
 
 def _stored_input_values(scene: dict[str, Any]) -> dict[str, Any]:
@@ -248,7 +267,7 @@ async def preview_scene_prompt(
         draft = _stored_prompt_draft(scene)
         if draft and not force_rewrite:
             meta = _scene_video_settings(scene).get("prompt_draft_meta") or {}
-            if meta.get("based_on") == based_on:
+            if meta.get("based_on") == based_on and meta.get("workflow_id") == workflow.get("id"):
                 return {
                     "prompt": draft,
                     "profile": profile,
@@ -259,7 +278,7 @@ async def preview_scene_prompt(
         await event_bus.publish(
             "agent.thinking",
             {
-                "message": f"H3 prompt rewrite · scene {scene.get('order_index')}",
+                "message": f"{_clip_label(scene)} · H3 prompt rewrite",
                 "project_id": project_id,
             },
         )
@@ -348,18 +367,11 @@ async def enqueue_video_jobs(
                 SELECT c.* FROM characters c
                 JOIN scene_characters sc ON sc.character_id = c.id
                 WHERE sc.scene_id = ?
+                ORDER BY sc.rowid ASC
                 """,
                 (scene["id"],),
             ).fetchall()
             characters = [row_to_dict(r) for r in char_rows]
-            char_image = next(
-                (
-                    c.get("sheet_path") or c.get("portrait_path")
-                    for c in characters
-                    if c.get("sheet_path") or c.get("portrait_path")
-                ),
-                None,
-            )
             loc_image = scene.get("env_image_path")
             loc_row: dict[str, Any] | None = None
             if scene.get("location_id"):
@@ -384,6 +396,12 @@ async def enqueue_video_jobs(
                 )
             if profile == "minimax_h3_ref":
                 subjects, ref_paths = _h3_subjects(characters, loc_row, loc_image, inputs)
+                required_refs = sum(1 for item in inputs if item.get("role") == "image")
+                if len(ref_paths) < required_refs:
+                    raise ValueError(
+                        f"{workflow.get('name', 'Video workflow')} requires {required_refs} "
+                        f"image references, but this scene has {len(ref_paths)}."
+                    )
                 # Prompt precedence: explicit request → saved (fresh) draft → LLM.
                 explicit_prompt = (prompts or {}).get(scene["id"])
                 fresh_draft = None
@@ -391,7 +409,10 @@ async def enqueue_video_jobs(
                     candidate = _stored_prompt_draft(scene)
                     if candidate:
                         meta = _scene_video_settings(scene).get("prompt_draft_meta") or {}
-                        if meta.get("based_on") == _scene_prompt_hash(scene):
+                        if (
+                            meta.get("based_on") == _scene_prompt_hash(scene)
+                            and meta.get("workflow_id") == wf_id
+                        ):
                             fresh_draft = candidate
                 if explicit_prompt is not None:
                     prompt = explicit_prompt
@@ -401,7 +422,7 @@ async def enqueue_video_jobs(
                     await event_bus.publish(
                         "agent.thinking",
                         {
-                            "message": f"H3 prompt rewrite · scene {scene.get('order_index')}",
+                            "message": f"{_clip_label(scene)} · H3 prompt rewrite",
                             "project_id": project_id,
                         },
                     )
@@ -417,14 +438,16 @@ async def enqueue_video_jobs(
                 prompt = (prompts or {}).get(scene["id"]) or scene_video_prompt(
                     scene, characters
                 )
+                _, ref_paths = _h3_subjects(characters, loc_row, loc_image, inputs)
                 values = smart_fill_inputs(
                     inputs,
                     prompt=prompt,
-                    character_image=char_image,
-                    location_image=loc_image,
+                    ref_images=ref_paths,
                     duration=duration,
                     extra=extra_values,
                 )
+            _save_prompt_draft(conn, scene, wf_id, prompt)
+            conn.commit()
             # Stored per-scene setups override smart-fill's context choices
             # (e.g. an edited duration). smart_fill skips duration-role nodes
             # in `extra` by design — re-apply them here, request values win.
@@ -432,8 +455,19 @@ async def enqueue_video_jobs(
                 **stored_values,
                 **{k: v for k, v in (input_values_override or {}).items() if v not in (None, "")},
             }
+            reference_node_ids = {
+                str(input_item["nodeId"])
+                for input_item in inputs
+                if input_item.get("role") in {"image", "video", "audio"}
+            }
             for k, v in explicit_final.items():
                 if v not in (None, ""):
+                    if (
+                        str(k) in reference_node_ids
+                        and isinstance(v, str)
+                        and not Path(v).exists()
+                    ):
+                        continue
                     values[str(k)] = v
             payload: dict[str, Any] = {"input_values": values, "prompt": prompt}
             if scene.get("chain_from_prev"):
@@ -488,7 +522,7 @@ async def enqueue_video_jobs(
                 {
                     "job_id": job["id"],
                     "kind": "video",
-                    "message": f"Scene · {scene.get('heading') or scene.get('order_index')}",
+                    "message": f"{_clip_label(scene)} · queued",
                     "project_id": project_id,
                 },
             )

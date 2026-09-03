@@ -26,6 +26,7 @@
 	let deletingId = $state<number | null>(null);
 	let sceneToDelete = $state<Scene | null>(null);
 	let deleteOpen = $state(false);
+	let scriptInstructionsDraft = $state('');
 
 	const scenesQuery = createQuery(
 		toStore(() => ({
@@ -79,6 +80,16 @@
 		},
 	});
 
+	$effect(() => {
+		if ($storyQuery.data?.project) scriptInstructionsDraft = $storyQuery.data.project.script_instructions ?? '';
+	});
+
+	const saveInstructionsMutation = createMutation({
+		mutationFn: () => projects.update(projectId, { script_instructions: scriptInstructionsDraft }),
+		onSuccess: () => { client.invalidateQueries({ queryKey: ['story', projectId] }); toast.success('Script instructions saved'); },
+		onError: (err) => toast.error(err instanceof Error ? err.message : 'Could not save script instructions'),
+	});
+
 	const busy = $derived(adding || deletingId != null || $regenerateMutation.isPending);
 
 	const saveMutation = createMutation({
@@ -86,6 +97,7 @@
 			projects.updateScene(projectId, editing!.id, {
 				heading: editing!.heading,
 				action: editing!.action,
+				creative_direction: editing!.creative_direction,
 				dialog: editing!.dialog,
 				duration_sec: editing!.duration_sec,
 			}),
@@ -102,12 +114,14 @@
 
 	// Chain-from-previous toggle — persists on the scene; consumed at render time.
 	let chainPendingId = $state<number | null>(null);
-	async function toggleChain(scene: Scene) {
+	let assetLinkPendingId = $state<number | null>(null);
+	async function setChain(scene: Scene, enabled: boolean) {
 		if (chainPendingId != null) return;
+		if (Boolean(scene.chain_from_prev) === enabled) return;
 		chainPendingId = scene.id;
 		try {
 			await projects.updateScene(projectId, scene.id, {
-				chain_from_prev: !scene.chain_from_prev,
+				chain_from_prev: enabled,
 			});
 			await client.invalidateQueries({ queryKey: ['scenes'] });
 		} catch (err) {
@@ -192,6 +206,19 @@
 			return;
 		}
 		$regenerateMutation.mutate();
+	}
+
+	async function updateSceneAssets(scene: Scene, characterIds: number[], locationId: number | null) {
+		if (assetLinkPendingId != null) return;
+		assetLinkPendingId = scene.id;
+		try {
+			await projects.updateScene(projectId, scene.id, { character_ids: characterIds, location_id: locationId });
+			await client.invalidateQueries({ queryKey: ['scenes'] });
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Could not update scene assets');
+		} finally {
+			assetLinkPendingId = null;
+		}
 	}
 
 	function goToVideo() {
@@ -299,6 +326,12 @@
 	</div>
 </header>
 
+<section class="script-instructions" aria-labelledby="script-instructions-title">
+	<div><h3 id="script-instructions-title">Global script instructions</h3><p class="muted small">Applied when the Script LLM generates or regenerates scenes.</p></div>
+	<textarea class="field-textarea" rows="3" bind:value={scriptInstructionsDraft} placeholder="Use more dialogue. Make Act 3 very dark. Ensure the box is opened in scene 5." onblur={() => $saveInstructionsMutation.mutate()}></textarea>
+	<Button variant="secondary" size="sm" loading={$saveInstructionsMutation.isPending} onclick={() => $saveInstructionsMutation.mutate()}>Save instructions</Button>
+</section>
+
 <div class="script-panel">
 	{#if $scenesQuery.isLoading}
 		<div class="card">Loading scenes…</div>
@@ -390,26 +423,40 @@
 								{/if}
 							</span>
 							{c.name}
+							<button
+								type="button"
+								class="chip-remove"
+								aria-label={`Remove ${c.name} from scene`}
+								disabled={assetLinkPendingId === scene.id}
+								onclick={() => updateSceneAssets(scene, (scene.character_ids ?? []).filter((id) => id !== c.id), scene.location_id)}
+							>
+								×
+							</button>
 						</span>
 					{/each}
+					<select class="asset-select" aria-label="Add character to scene" disabled={assetLinkPendingId === scene.id} onchange={(event) => { const id = Number(event.currentTarget.value); if (id) updateSceneAssets(scene, [...(scene.character_ids ?? []), id], scene.location_id); event.currentTarget.value = ''; }}>
+						<option value="">+ Character</option>
+						{#each ($assetsQuery.data?.characters ?? []).filter((c) => !(scene.character_ids ?? []).includes(c.id)) as c (c.id)}
+							<option value={c.id}>{c.name}</option>
+						{/each}
+					</select>
 					{#if locName}
-						<span class="chip"><Icon name="folder" size={12} /> {locName}</span>
+						<span class="chip"><Icon name="folder" size={12} /> {locName}<button type="button" class="chip-remove" aria-label="Remove location from scene" disabled={assetLinkPendingId === scene.id} onclick={() => updateSceneAssets(scene, scene.character_ids ?? [], null)}>×</button></span>
 					{/if}
+					<select class="asset-select" aria-label="Set scene location" disabled={assetLinkPendingId === scene.id} onchange={(event) => updateSceneAssets(scene, scene.character_ids ?? [], event.currentTarget.value ? Number(event.currentTarget.value) : null)}>
+						<option value="">{locName ? 'Change location' : '+ Location'}</option>
+						{#each ($assetsQuery.data?.locations ?? []) as location (location.id)}
+							<option value={location.id}>{location.name}</option>
+						{/each}
+					</select>
 					{#if scene.duration_sec}
 						<span class="chip"><Icon name="clock" size={12} /> {formatClock(scene.duration_sec)}</span>
 					{/if}
 					{#if i > 0}
-						<button
-							type="button"
-							class="chip chip-toggle"
-							class:chip-on={Boolean(scene.chain_from_prev)}
-							disabled={chainPendingId === scene.id}
-						title="This scene's clip continues from a previous video (Extend-style). Requires a workflow with a video input; pick the source clip in the Video stage."
-						onclick={() => toggleChain(scene)}
-					>
-						<Icon name="film" size={12} />
-						{Boolean(scene.chain_from_prev) ? 'Continues from previous video' : 'Continue from previous video'}
-						</button>
+						<select class="asset-select" aria-label="Continuation mode" value={scene.chain_from_prev ? 'continue' : 'new'} disabled={chainPendingId === scene.id} onchange={(event) => setChain(scene, event.currentTarget.value === 'continue')}>
+							<option value="new">New clip</option>
+							<option value="continue">Continue from previous video</option>
+						</select>
 					{/if}
 				</div>
 			</article>
@@ -446,6 +493,15 @@
 			></textarea>
 		</label>
 		<label class="field">
+			<span class="field-label">Creative direction (optional)</span>
+			<textarea
+				class="field-textarea"
+				bind:value={editing.creative_direction}
+				rows="3"
+				placeholder="Make this scene very dark, with slow camera movement and deep shadows."
+			></textarea>
+		</label>
+		<label class="field">
 			<span class="field-label">Duration (sec)</span>
 			<input class="field-input" type="number" bind:value={editing.duration_sec} min="1" />
 		</label>
@@ -475,6 +531,19 @@
 />
 
 <style>
+	.script-instructions {
+		display: grid;
+		gap: 10px;
+		margin-bottom: var(--space-lg);
+		padding: 16px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: var(--bg-elevated);
+	}
+	.script-instructions h3,
+	.script-instructions p {
+		margin: 0;
+	}
 	.stage-header {
 		/* Pins inside the stage scroll container so Add Scene / Regenerate
 		   stay reachable while scrolling long scripts. */
@@ -642,22 +711,27 @@
 		font-size: 12px;
 		color: var(--text-secondary);
 	}
-	.chip-toggle {
+	.chip-remove {
+		border: 0;
+		padding: 0;
+		background: transparent;
+		color: var(--text-muted);
 		cursor: pointer;
-		font-family: inherit;
+		font-size: 14px;
+		line-height: 1;
 	}
-	.chip-toggle:hover {
-		color: var(--text-primary);
-		border-color: #52525b;
+	.chip-remove:hover {
+		color: var(--danger);
 	}
-	.chip-toggle:disabled {
-		opacity: 0.6;
-		cursor: wait;
-	}
-	.chip-on {
-		color: var(--accent);
-		border-color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+	.asset-select {
+		max-width: 190px;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		padding: 3px 8px;
+		background: var(--bg-elevated);
+		color: var(--text-secondary);
+		font: inherit;
+		font-size: 12px;
 	}
 	.avatar {
 		position: relative;

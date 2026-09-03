@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS projects (
     genre TEXT,
     tone TEXT,
     target_duration TEXT,
+    script_instructions TEXT,
     cover_path TEXT,
     status TEXT NOT NULL DEFAULT 'draft',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS scenes (
     heading TEXT,
     action TEXT,
     dialog TEXT,
+    creative_direction TEXT,
     duration_sec INTEGER,
     workflow_id INTEGER,
     env_image_path TEXT,
@@ -202,6 +204,12 @@ async def migrate_db(db_path: Path) -> None:
         cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         if "negative_prompt" not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN negative_prompt TEXT")
+    project_cols = {r[1] for r in conn.execute("PRAGMA table_info(projects)").fetchall()}
+    if "script_instructions" not in project_cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN script_instructions TEXT")
+    scene_cols = {r[1] for r in conn.execute("PRAGMA table_info(scenes)").fetchall()}
+    if "creative_direction" not in scene_cols:
+        conn.execute("ALTER TABLE scenes ADD COLUMN creative_direction TEXT")
     project_cols = {r[1] for r in conn.execute("PRAGMA table_info(projects)").fetchall()}
     if "cover_path" not in project_cols:
         conn.execute("ALTER TABLE projects ADD COLUMN cover_path TEXT")

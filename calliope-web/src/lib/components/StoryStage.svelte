@@ -75,6 +75,7 @@
 	let addingBeat = $state(false);
 	// Static defaults — the $effect below syncs all drafts from the story prop.
 	let ideaDraft = $state('');
+	let scriptInstructionsDraft = $state('');
 	let genreDraft = $state(GENRES[0]);
 	let toneDraft = $state(TONES[0]);
 	let lengthDraft = $state('2 minutes');
@@ -83,6 +84,8 @@
 	type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 	let saveState = $state<SaveState>('idle');
 	let savedTimer: ReturnType<typeof setTimeout> | null = null;
+	let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let draftProjectId = $state<number | null>(null);
 
 	const beatBudget = $derived(recommendBeatCount(lengthDraft));
 	const sceneBudget = $derived(recommendSceneCount(lengthDraft));
@@ -98,17 +101,26 @@
 	);
 
 	$effect(() => {
+		if (draftProjectId === projectId) return;
 		ideaDraft = story.project.idea ?? '';
+		scriptInstructionsDraft = story.project.script_instructions ?? '';
 		genreDraft = story.project.genre || GENRES[0];
 		toneDraft = story.project.tone || TONES[0];
 		lengthDraft = story.project.target_duration || '2 minutes';
+		draftProjectId = projectId;
 	});
 
 	$effect(() => {
 		return () => {
 			if (savedTimer) clearTimeout(savedTimer);
+			if (draftSaveTimer) clearTimeout(draftSaveTimer);
 		};
 	});
+
+	function scheduleSettingsSave() {
+		if (draftSaveTimer) clearTimeout(draftSaveTimer);
+		draftSaveTimer = setTimeout(() => void persistSettings(), 700);
+	}
 
 	function armSavedTimer() {
 		if (savedTimer) clearTimeout(savedTimer);
@@ -123,6 +135,7 @@
 			genre?: string;
 			tone?: string;
 			target_duration?: string;
+			script_instructions?: string;
 		}) => projects.update(projectId, payload),
 		onMutate: () => {
 			saveState = 'saving';
@@ -138,6 +151,20 @@
 		},
 	});
 
+	const generateStoryMutation = createMutation({
+		mutationFn: async () => {
+			if (!(await persistSettings())) throw new Error('Could not save story settings');
+			return projects.generateStory(projectId, true);
+		},
+		onSuccess: async (result) => {
+			await client.invalidateQueries({ queryKey: ['story'] });
+			await client.invalidateQueries({ queryKey: ['assets'] });
+			await client.invalidateQueries({ queryKey: ['scenes'] });
+			toast.success(`Story regenerated — ${result.beats.length} beats`);
+		},
+		onError: (err) => toast.error(err instanceof Error ? err.message : 'Could not regenerate story'),
+	});
+
 	/** Autosave path — returns false on failure (mutation onError already toasted). */
 	async function persistSettings(): Promise<boolean> {
 		try {
@@ -146,6 +173,7 @@
 				genre: genreDraft || undefined,
 				tone: toneDraft || undefined,
 				target_duration: lengthDraft || undefined,
+				script_instructions: scriptInstructionsDraft || undefined,
 			});
 			return true;
 		} catch {
@@ -165,6 +193,17 @@
 	function requestLoadExample() {
 		if (ideaDraft.trim()) confirmExampleOpen = true;
 		else void loadExample();
+	}
+
+	function requestGenerateStory() {
+		if (!configured || $generateStoryMutation.isPending) return;
+		if (
+			story.beats.length > 0 &&
+			!window.confirm('Regenerate the storyline from the current idea? Existing beats and generated story assets will be replaced.')
+		) {
+			return;
+		}
+		$generateStoryMutation.mutate();
 	}
 
 	/** Hand off to a fresh, project-linked agent chat with the composer pre-filled. */
@@ -348,15 +387,40 @@
 	<Card>
 	{#snippet header()}
 		<h3 class="card-h">Story Idea</h3>
-		{@render saveIndicator()}
+		<div class="head-actions">
+			{@render saveIndicator()}
+			<Button variant="secondary" size="sm" loading={$saveProject.isPending} onclick={() => void persistSettings()}>
+				Save story
+			</Button>
+			<Button variant="secondary" size="sm" disabled={!configured} loading={$generateStoryMutation.isPending} onclick={requestGenerateStory}>
+				<Icon name="sparkle" size={14} /> Generate beats
+			</Button>
+		</div>
 	{/snippet}
 	<textarea
 		class="field-textarea"
 		bind:value={ideaDraft}
 		rows="5"
 		placeholder="A lone cartographer discovers a map that rewrites itself every midnight..."
+		oninput={scheduleSettingsSave}
 		onblur={() => void persistSettings()}
 	></textarea>
+</Card>
+
+<Card>
+	{#snippet header()}
+		<h3 class="card-h">Script instructions</h3>
+		<span class="muted small">Optional global guidance</span>
+	{/snippet}
+	<textarea
+		class="field-textarea"
+		bind:value={scriptInstructionsDraft}
+		rows="4"
+		placeholder="Use more dialogue. Make the final reveal very dark. Keep the grandmother's box important."
+		oninput={scheduleSettingsSave}
+		onblur={() => void persistSettings()}
+	></textarea>
+	<p class="field-hint">These instructions are included when the Script LLM creates beats and scenes.</p>
 </Card>
 
 <Card>

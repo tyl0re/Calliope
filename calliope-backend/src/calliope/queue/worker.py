@@ -34,6 +34,9 @@ def randomize_sampler_seeds(workflow: dict[str, Any]) -> dict[str, Any]:
             if "(Input:seed)" in title:
                 node.setdefault("inputs", {})["value"] = secrets.randbelow(2**31)
             continue
+        if class_type == "RandomNoise":
+            node.setdefault("inputs", {})["noise_seed"] = secrets.randbelow(2**63)
+            continue
         if class_type not in {"KSampler", "KSamplerAdvanced"}:
             continue
         inputs = node.setdefault("inputs", {})
@@ -161,7 +164,7 @@ class QueueWorker:
             patched = await client.prepare_media_inputs(patched)
             prompt_id = await client.queue_prompt(patched)
 
-            history = await self._poll_history(client, prompt_id)
+            history = await self._poll_history(client, prompt_id, job)
             if not history:
                 raise RuntimeError("Timed out waiting for ComfyUI history")
 
@@ -171,6 +174,10 @@ class QueueWorker:
                 raise RuntimeError(f"ComfyUI error: {messages}")
 
             outputs_meta = client.extract_outputs(history)
+            if kind == "video":
+                outputs_meta = [meta for meta in outputs_meta if client.is_video_output(meta)]
+                if not outputs_meta:
+                    raise RuntimeError("Video workflow completed without a video output")
             dest_dir = config.settings.assets_dir / str(project_id) / kind
             dest_dir.mkdir(parents=True, exist_ok=True)
             paths: list[str] = []
@@ -279,7 +286,12 @@ class QueueWorker:
         await asyncio.sleep(0.3)
         return paths
 
-    async def _poll_history(self, client: ComfyUIClient, prompt_id: str) -> dict[str, Any] | None:
+    async def _poll_history(
+        self,
+        client: ComfyUIClient,
+        prompt_id: str,
+        job: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         interval = max(config.settings.queue_poll_interval_sec, 0.5)
         timeout = config.settings.queue_poll_timeout_sec
         # 0 (or negative) = keep polling until the job completes or is cancelled.
@@ -299,7 +311,10 @@ class QueueWorker:
                 "job.progress",
                 {
                     "prompt_id": prompt_id,
-                    "message": f"Waiting on ComfyUI ({prompt_id[:8]}…)",
+                    "message": (
+                        f"{self._job_label(job) if job else 'Job'} · "
+                        f"Waiting on ComfyUI ({prompt_id[:8]}…)"
+                    ),
                 },
             )
         return None
@@ -362,7 +377,7 @@ class QueueWorker:
                 ).fetchone()
                 if row:
                     heading = (row["heading"] or f"Scene {row['order_index']}").strip()
-                    return f"Scene · {heading}"
+                    return f"Clip #{row['order_index']} · {heading}"
                 return f"Scene #{job['scene_id']}"
         finally:
             conn.close()

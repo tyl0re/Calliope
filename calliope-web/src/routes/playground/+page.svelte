@@ -25,6 +25,11 @@
 	let deletingId = $state<number | null>(null);
 	let attempted = $state(false);
 	let missingLabels = $state<string[]>([]);
+	let artifactJob = $state<Job | null>(null);
+	let artifactPrompt = $state('');
+	let artifactValues = $state<Record<string, unknown>>({});
+	let artifactEditing = $state(false);
+	let artifactError = $state('');
 
 	const workflowsQuery = createQuery({
 		queryKey: ['workflows'],
@@ -42,11 +47,28 @@
 		placeholderData: (prev) => prev,
 	});
 
-	const enabledWorkflows = $derived(
-		($workflowsQuery.data ?? []).filter((w: Workflow) => w.is_enabled),
-	);
+	const allWorkflows = $derived(($workflowsQuery.data ?? []) as Workflow[]);
+	const enabledWorkflows = $derived(allWorkflows.filter((w) => w.is_enabled));
 
 	const selected = $derived(enabledWorkflows.find((w) => w.id === workflowId) ?? null);
+	const artifactWorkflow = $derived(
+		allWorkflows.find((w) => w.id === artifactJob?.workflow_id) ?? null,
+	);
+	const artifactSettings = $derived.by(() => {
+		if (!artifactJob?.payload?.input_values) return [];
+		const values = artifactValues;
+		return Object.entries(values)
+			.filter(([nodeId, value]) => {
+				const input = artifactWorkflow?.input_schema.find((item) => item.nodeId === nodeId);
+				return input?.role !== 'prompt' && value !== null && value !== undefined && String(value) !== '';
+			})
+			.map(([nodeId, value]) => ({
+				nodeId,
+				label: artifactWorkflow?.input_schema.find((item) => item.nodeId === nodeId)?.label ?? nodeId,
+				kind: artifactWorkflow?.input_schema.find((item) => item.nodeId === nodeId)?.kind ?? 'text',
+				value: String(value),
+			}));
+	});
 
 	// Mode: filter by workflow kind — Video Generation / Image Generation
 	let mode = $state<'video' | 'image'>('video');
@@ -58,7 +80,13 @@
 		const list = modeWorkflows;
 		if (list.length === 0) return;
 		if (workflowId === '' || !list.some((w) => w.id === workflowId)) {
-			workflowId = list[0].id;
+			const promptOnly = list.find(
+				(workflow) =>
+					!workflow.input_schema.some((input) =>
+						['image', 'video'].includes(input.role ?? ''),
+					),
+			);
+			workflowId = promptOnly?.id ?? list[0].id;
 		}
 	});
 
@@ -108,6 +136,30 @@
 		},
 	});
 
+	const regenerateArtifactMutation = createMutation({
+		mutationFn: () => {
+			if (!artifactJob || !artifactWorkflow) throw new Error('Artifact workflow is unavailable');
+			const promptInput = artifactWorkflow.input_schema.find((input) => input.role === 'prompt');
+			if (!promptInput) throw new Error('Artifact workflow has no prompt input');
+			const values = { ...artifactValues };
+			values[promptInput.nodeId] = artifactPrompt;
+			return playgroundApi.generate({
+				workflow_id: artifactWorkflow.id,
+				input_values: values,
+				random_seed: true,
+			});
+		},
+		onSuccess: () => {
+			artifactError = '';
+			client.invalidateQueries({ queryKey: ['playground-jobs'] });
+			toast.success('Regeneration queued with a new seed');
+		},
+		onError: (err) => {
+			artifactError = err instanceof Error ? err.message : 'Regeneration failed';
+			toast.error(artifactError);
+		},
+	});
+
 	function tryGenerate() {
 		if ($generateMutation.isPending) return;
 		if (workflowId === '') {
@@ -120,6 +172,20 @@
 			return;
 		}
 		$generateMutation.mutate();
+	}
+
+	function openArtifact(job: Job) {
+		artifactJob = job;
+		artifactEditing = false;
+		artifactError = '';
+		const workflow = allWorkflows.find((candidate) => candidate.id === job.workflow_id);
+		const promptInput = workflow?.input_schema.find((input) => input.role === 'prompt');
+		const inputValues = (job.payload?.input_values ?? {}) as Record<string, unknown>;
+		const value = promptInput ? inputValues[promptInput.nodeId] : undefined;
+		artifactPrompt =
+			(typeof job.payload?.prompt === 'string' && job.payload.prompt) ||
+			(typeof value === 'string' ? value : '');
+		artifactValues = { ...inputValues };
 	}
 
 	async function deleteJob(job: Job) {
@@ -311,8 +377,9 @@
 										class="media-hit"
 										aria-label="Play video, artifact {job.id}"
 										title="Play in viewer"
-										onclick={() => {
-											previewSrc = primaryMedia;
+																	onclick={() => {
+																	openArtifact(job);
+																	previewSrc = primaryMedia;
 											previewAlt = `Artifact #${job.id}`;
 											previewKind = 'video';
 										}}
@@ -335,8 +402,9 @@
 										type="button"
 										class="media-hit"
 										aria-label="View image, artifact {job.id}"
-										onclick={() => {
-											previewSrc = primaryMedia;
+																	onclick={() => {
+																	openArtifact(job);
+																	previewSrc = primaryMedia;
 											previewAlt = `Artifact #${job.id}`;
 											previewKind = 'image';
 										}}
@@ -361,6 +429,18 @@
 							{/if}
 
 							<div class="card-actions">
+								{#if job.status === 'done' && job.payload?.input_values}
+									<button
+										class="btn btn-secondary"
+										type="button"
+										onclick={() => {
+											openArtifact(job);
+											artifactEditing = true;
+										}}
+									>
+										Edit
+									</button>
+								{/if}
 								{#if primaryPath && primaryMedia}
 									<AttachToProject path={primaryPath} kind={job.kind} />
 								{/if}
@@ -390,6 +470,66 @@
 				</ul>
 			{/if}
 		</section>
+
+		{#if artifactJob}
+			<section class="artifact-editor" aria-labelledby="artifact-editor-title">
+				<div class="artifact-editor-head">
+					<div>
+						<p class="eyebrow">Artifact #{artifactJob.id}</p>
+						<h2 id="artifact-editor-title">Prompt &amp; settings</h2>
+					</div>
+					<div class="artifact-editor-actions">
+						{#if artifactEditing}
+							<button class="btn btn-secondary" type="button" onclick={() => (artifactEditing = false)}>Cancel</button>
+						{:else}
+							<button class="btn btn-secondary" type="button" onclick={() => (artifactEditing = true)}>Edit</button>
+						{/if}
+						<button class="btn btn-ghost" type="button" onclick={() => { artifactJob = null; artifactEditing = false; }}>Close</button>
+					</div>
+				</div>
+				<label class="field">
+					<span class="field-label">Prompt</span>
+					<textarea
+						class="field-textarea artifact-prompt"
+						rows="8"
+						value={artifactPrompt}
+						readonly={!artifactEditing}
+						oninput={(event) => (artifactPrompt = event.currentTarget.value)}
+					></textarea>
+				</label>
+				{#if artifactSettings.length > 0}
+					<div class="artifact-settings">
+						<h3>Generation settings</h3>
+						{#each artifactSettings as setting (setting.label)}
+							<label class="artifact-setting">
+								<span>{setting.label}</span>
+								{#if artifactEditing}
+									<input
+										class="artifact-setting-input"
+										type={setting.kind === 'number' ? 'number' : 'text'}
+										value={setting.value}
+										oninput={(event) => (artifactValues = { ...artifactValues, [setting.nodeId]: setting.kind === 'number' ? Number(event.currentTarget.value) : event.currentTarget.value })}
+									/>
+								{:else}
+									<code>{setting.value}</code>
+								{/if}
+							</label>
+						{/each}
+					</div>
+				{/if}
+				{#if artifactError}<p class="err">{artifactError}</p>{/if}
+				{#if artifactEditing}
+				<button
+					class="btn btn-primary"
+					type="button"
+					disabled={$regenerateArtifactMutation.isPending || !artifactPrompt.trim()}
+					onclick={() => $regenerateArtifactMutation.mutate()}
+				>
+					{$regenerateArtifactMutation.isPending ? 'Queueing…' : 'Regenerate with new seed'}
+				</button>
+				{/if}
+			</section>
+		{/if}
 
 		<!-- Composer docked at bottom — always visible (Kling Omni style) -->
 		<div class="composer-dock">
@@ -518,6 +658,56 @@
 		flex-direction: column;
 		gap: var(--space-md);
 		padding-right: 2px;
+	}
+
+	.artifact-editor {
+		margin: 22px 0 180px;
+		padding: 20px;
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		background: var(--bg-surface);
+	}
+	.artifact-editor-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 16px;
+		margin-bottom: 16px;
+	}
+	.artifact-editor-actions {
+		display: flex;
+		gap: 8px;
+	}
+	.artifact-editor h2,
+	.artifact-settings h3 {
+		margin: 0;
+	}
+	.artifact-prompt {
+		min-height: 180px;
+		width: 100%;
+		box-sizing: border-box;
+	}
+	.artifact-settings {
+		display: grid;
+		gap: 8px;
+		margin: 16px 0;
+	}
+	.artifact-setting {
+		display: flex;
+		justify-content: space-between;
+		gap: 20px;
+		padding: 8px 10px;
+		border-radius: 8px;
+		background: var(--bg-elevated);
+		color: var(--text-secondary);
+	}
+	.artifact-setting-input {
+		width: min(55%, 360px);
+		padding: 6px 8px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
 	}
 
 	.artifacts-head {

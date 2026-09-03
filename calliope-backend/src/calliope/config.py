@@ -137,6 +137,8 @@ class Settings(BaseSettings):
     queue_poll_timeout_sec: float = 1800.0
     queue_max_retries: int = 2
     agent_max_steps: int = 24
+    script_min_scene_duration_sec: int = 4
+    script_max_scene_duration_sec: int = 30
     agent_hardening_prompt: str = DEFAULT_AGENT_HARDENING_PROMPT
     dry_run: bool = False  # off by default — real ComfyUI jobs
 
@@ -333,6 +335,8 @@ class Settings(BaseSettings):
             "queue_poll_timeout_sec": self.queue_poll_timeout_sec,
             "queue_max_retries": self.queue_max_retries,
             "agent_max_steps": self.agent_max_steps,
+            "script_min_scene_duration_sec": self.script_min_scene_duration_sec,
+            "script_max_scene_duration_sec": self.script_max_scene_duration_sec,
             "agent_hardening_prompt": self.agent_hardening_prompt,
             "dry_run": bool(self.dry_run),
         }

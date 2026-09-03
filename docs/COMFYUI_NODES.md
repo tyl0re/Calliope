@@ -56,6 +56,19 @@ The NegPiP node must be connected after the model and CLIP LoRA loaders and befo
 
 The MiniMax H3 examples require the H3-related custom nodes shown by ComfyUI's `/object_info` endpoint. Install the corresponding node packages through ComfyUI Manager or your normal node-management process before importing those workflows.
 
+The text-only H3 T2V/Playground example can use the community INT8 ConvRot text encoder
+`qwen3vl_32b_minimax_h3_int8_convrot_uncensored-by-linjian257.safetensors`. Download it from [linjian257's repository](https://huggingface.co/linjian257/qwen3vl_32b_minimax_h3_int8_convrot_uncensored-by-linjian257) into `models/text_encoders/minimax-h3/`, then refresh or restart ComfyUI. It is a 24 GiB text-encoder component, not a complete video model; the H3 diffusion model, video VAE, and workflow nodes are still required. The repository is community-provided and uses a personal-entertainment-use-only license. The `uncensored` label is not a guarantee for every prompt or generation.
+
+Reference-to-video and image-to-video examples use the compatible stock H3 INT8 ConvRot encoder because the community encoder's visual path currently requires an unavailable `bfloat16` dequantization backend in ComfyUI. The text-to-video/Playground workflow can use the community encoder. Matching the diffusion-model quantization does not fix this; the text encoder itself would need a new compatible quantized artifact. All H3 text-to-video and image-to-video examples require the Comfy-Org pruned FP8 FL2VA diffusion model `minimax_h3_fl2va_pruned_fp8_scaled.safetensors` in `models/unet/minimax-h3/` and `minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors` in `models/loras/minimax-h3/`. The Playground workflows use a direct `VAE Decode → VHS_VideoCombine` path and do not require the optional LTX/upscaling post-processing branch.
+
+To enable the community encoder's visual path, apply the narrow compatibility patch after installing ComfyUI:
+
+```bash
+python scripts/patch_comfy_kitchen_embedding.py --comfyui /path/to/ComfyUI
+```
+
+The script creates a `.calliope.bak` backup, is idempotent, and refuses to patch an unexpected source layout. Restart ComfyUI after applying it. This is an experimental compatibility workaround; if it fails or produces unstable output, restore the backup and use the stock encoder for R2V/I2V.
+
 ## Adding Another Required Node
 
 Add a new allowlisted entry to `NODE_REPOSITORIES` in `scripts/install_comfy_nodes.py`, using a stable HTTPS repository URL and a directory name. Document the node, its hardware/OS requirements, and the workflow connection in this file. Do not add machine-local paths, credentials, model files, or generated databases to the repository.

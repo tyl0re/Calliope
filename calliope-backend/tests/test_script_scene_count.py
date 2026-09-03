@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from calliope.agent.prompts import build_script_messages, recommend_scene_count
+from calliope.agent.script_agent import _normalize_scene_durations
 
 
 def test_build_script_messages_honors_expanded_scene_count():
@@ -20,6 +21,22 @@ def test_build_script_messages_honors_expanded_scene_count():
     assert "required_scene_count: 6" in user
     assert "EXACTLY 6 objects" in user
     assert "scenes.length == 6" in user
+
+
+def test_script_durations_are_distributed_across_target_runtime():
+    scenes = [{"duration_sec": 99} for _ in range(5)]
+
+    _normalize_scene_durations(scenes, 30)
+
+    assert [scene["duration_sec"] for scene in scenes] == [6, 6, 6, 6, 6]
+
+
+def test_script_durations_preserve_llm_editorial_proportions():
+    scenes = [{"duration_sec": 4}, {"duration_sec": 8}, {"duration_sec": 12}]
+
+    _normalize_scene_durations(scenes, 24)
+
+    assert [scene["duration_sec"] for scene in scenes] == [4, 8, 12]
 
 
 def test_script_regenerate_keeps_expanded_count(client, monkeypatch):
@@ -51,7 +68,10 @@ def test_script_regenerate_keeps_expanded_count(client, monkeypatch):
 
     monkeypatch.setattr("calliope.agent.script_agent.generate_structured", fake_structured)
 
-    r = client.post("/api/projects", json={"title": "Expand", "idea": "desert", "target_duration": "30 seconds"})
+    r = client.post(
+        "/api/projects",
+        json={"title": "Expand", "idea": "desert", "target_duration": "30 seconds"},
+    )
     pid = r.json()["id"]
 
     # Seed 4 scenes via generate

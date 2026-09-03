@@ -30,6 +30,8 @@ class SettingsUpdate(BaseModel):
     comfyui_base_url: str | None = None
     comfyui_api_key: str | None = None
     krea2_mode: Literal["local", "api"] | None = None
+    script_min_scene_duration_sec: int | None = None
+    script_max_scene_duration_sec: int | None = None
     data_dir: str | None = None
     assets_dir: str | None = None
     queue_concurrency: int | None = Field(None, ge=1, le=8)

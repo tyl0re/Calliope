@@ -9,6 +9,7 @@ export interface Project {
 	genre: string | null;
 	tone: string | null;
 	target_duration: string | null;
+	script_instructions: string | null;
 	cover_path: string | null;
 	status: string;
 	created_at: string;
@@ -29,6 +30,7 @@ export interface ProjectCreate {
 	genre?: string;
 	tone?: string;
 	target_duration?: string;
+	script_instructions?: string;
 }
 
 export interface Beat {
@@ -99,6 +101,8 @@ export interface Settings {
 	comfyui_base_url: string;
 	comfyui_api_key: boolean;
 	krea2_mode: 'local' | 'api';
+	script_min_scene_duration_sec: number;
+	script_max_scene_duration_sec: number;
 	queue_concurrency: number;
 	queue_poll_interval_sec: number;
 	queue_poll_timeout_sec: number;
@@ -158,8 +162,27 @@ export const projects = {
 		api<Project>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
 	delete: (id: number) => api<{ ok: boolean }>(`/api/projects/${id}`, { method: 'DELETE' }),
 	getStory: (id: number) => api<StoryData>(`/api/projects/${id}/story`),
+	generateStory: (id: number, replace = true) =>
+		api<StoryData>(`/api/projects/${id}/generate-story?replace=${replace}`, {
+			method: 'POST',
+		}),
 	generateScript: (id: number, payload: { replace?: boolean; scene_count?: number } = {}) =>
 		api<{ ok: boolean; scenes: Scene[] }>(`/api/projects/${id}/generate-script`, {
+			method: 'POST',
+			body: JSON.stringify(payload),
+		}),
+	createCharacter: (projectId: number, payload: Omit<Character, 'id' | 'portrait_path' | 'sheet_path'>) =>
+		api<Character>(`/api/projects/${projectId}/characters`, {
+			method: 'POST',
+			body: JSON.stringify(payload),
+		}),
+	createLocation: (projectId: number, payload: Omit<Location, 'id' | 'reference_image_path'>) =>
+		api<Location>(`/api/projects/${projectId}/locations`, {
+			method: 'POST',
+			body: JSON.stringify(payload),
+		}),
+	createItem: (projectId: number, payload: Omit<Item, 'id' | 'reference_image_path'>) =>
+		api<Item>(`/api/projects/${projectId}/items`, {
 			method: 'POST',
 			body: JSON.stringify(payload),
 		}),
@@ -339,7 +362,11 @@ export interface PlaygroundUploadListItem {
 export const playgroundApi = {
 	project: () => api<Project>('/api/playground/project'),
 	jobs: () => api<Job[]>('/api/playground/jobs'),
-	generate: (payload: { workflow_id: number; input_values?: Record<string, unknown> }) =>
+	generate: (payload: {
+		workflow_id: number;
+		input_values?: Record<string, unknown>;
+		random_seed?: boolean;
+	}) =>
 		api<{ ok: boolean; job: Job }>('/api/playground/generate', {
 			method: 'POST',
 			body: JSON.stringify(payload),

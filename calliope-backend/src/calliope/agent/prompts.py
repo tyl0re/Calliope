@@ -71,10 +71,15 @@ def recommend_beat_count(target_duration: str | None) -> int:
     return max(4, min(60, round(secs / 12)))
 
 
-def recommend_scene_count(target_duration: str | None) -> int:
-    """Video scenes (~7s each) for the target runtime."""
+def recommend_scene_count(
+    target_duration: str | None,
+    min_scene_duration_sec: int = 4,
+    max_scene_duration_sec: int = 30,
+) -> int:
+    """Video scenes based on the midpoint of the configured duration range."""
     secs = estimate_target_seconds(target_duration)
-    return max(4, min(90, round(secs / 7)))
+    midpoint = max(1, (min_scene_duration_sec + max_scene_duration_sec) / 2)
+    return max(4, min(90, round(secs / midpoint)))
 
 
 def story_generation_user_prompt(
@@ -163,10 +168,15 @@ def build_script_messages(
     characters: list[dict[str, Any]],
     locations: list[dict[str, Any]],
     target_duration: str | None,
+    script_instructions: str | None = None,
     scene_count: int | None = None,
+    min_scene_duration_sec: int = 4,
+    max_scene_duration_sec: int = 15,
 ) -> list[dict[str, str]]:
     secs = estimate_target_seconds(target_duration)
-    recommended = recommend_scene_count(target_duration)
+    recommended = recommend_scene_count(
+        target_duration, min_scene_duration_sec, max_scene_duration_sec
+    )
     # Honor an explicit / existing count (e.g. user added empty scenes before regenerate)
     scene_n = max(recommended, int(scene_count)) if scene_count and scene_count > 0 else recommended
     # Stretch runtime floor when the user asked for more clips than duration alone implies
@@ -199,12 +209,16 @@ Characters:
 Locations:
 {loc_lines or '(none)'}
 
+Additional script instructions:
+{script_instructions or '(none)'}
+
 === HARD CONSTRAINTS (non-negotiable) ===
 1. The JSON field "scenes" MUST contain EXACTLY {scene_n} objects.
 2. order_index must run 1, 2, 3, ... {scene_n} with no gaps.
 3. Do NOT collapse back to fewer scenes. The user expanded the script to {scene_n} clips — fill all of them.
 4. Sum of duration_sec across all scenes should be approximately {secs} (within ±15%).
-5. Prefer short scenes (5–10s) — this is for AI video clips. Spread the beat arc across all {scene_n} scenes.
+5. duration_sec is an editorial recommendation, not a constant: vary it intentionally between {min_scene_duration_sec} and {max_scene_duration_sec} seconds based on action complexity, dialogue, reveals, reaction beats, and transitions.
+6. Do not force a single average duration. Use the full range deliberately: short transitions can be near the minimum, ordinary beats can be in the middle, and major reveals, dialogue, or sustained actions may use the upper range. Spread the beat arc across all {scene_n} scenes.
 
 === ACTION DETAIL (this text IS the video prompt — users copy it straight into the generator) ===
 Each scene's "action" is fed verbatim to an AI video generator. Write 4–6 vivid present-tense
@@ -241,6 +255,7 @@ Respond ONLY with JSON:
       "action": "Wide establishing shot, slow push-in through the cracked main doorway. MIA, a teenage girl with a chestnut ponytail and yellow rain jacket, steps into the dusty main hall, lantern held high, its warm glow catching drifting dust motes around her cautious, widening eyes. She freezes mid-step, fingers tightening on the lantern handle as she looks up. Overturned desks and a collapsed chalkboard fill the frame; moonlight cuts through shattered windows in pale blue shafts. The mood is hushed and uneasy, shadows pooling at the edges of the lantern light.",
       "dialog": "MIA (whispering): line\\nNARRATOR: line",
       "duration_sec": 5,
+      "creative_direction": "Optional scene-specific visual direction, or an empty string",
       "character_ids": [1],
       "location_id": 1
     }}
@@ -357,6 +372,9 @@ def scene_video_prompt(scene: dict[str, Any], characters: list[dict[str, Any]]) 
     parts = [
         scene.get("heading") or "",
         scene.get("action") or "",
+        f"creative direction: {scene.get('creative_direction')}"
+        if scene.get("creative_direction")
+        else "",
         f"featuring {char_bits}" if char_bits else "",
         "cinematic motion, coherent continuity",
     ]
@@ -439,6 +457,9 @@ Action (visual base for detailed_description):
 Dialogue (raw 'SPEAKER: line' format; optional '(delivery cue)' after the speaker —
 map speakers to subjects by name and keep cues as delivery direction):
 {scene.get('dialog') or '(none)'}
+
+Scene-specific creative direction:
+{scene.get('creative_direction') or '(none)'}
 
 Referenced subjects (keep these exact indices):
 {roster}

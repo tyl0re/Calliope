@@ -18,6 +18,7 @@ from calliope.comfyui.registry import (
 from calliope.config import settings
 
 logger = logging.getLogger("calliope.comfyui")
+_VIDEO_EXTENSIONS = frozenset({".avi", ".mkv", ".mov", ".mp4", ".webm"})
 _COMFY_API_NODE_TYPES = frozenset({"Krea2ImageNode", "Krea2StyleReferenceNode"})
 
 
@@ -236,3 +237,7 @@ class ComfyUIClient:
                         }
                     )
         return outputs
+
+    @staticmethod
+    def is_video_output(meta: dict[str, str]) -> bool:
+        return Path(meta.get("filename", "")).suffix.lower() in _VIDEO_EXTENSIONS

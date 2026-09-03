@@ -114,8 +114,11 @@
 	// Stale check: a draft saved against different scene content should warn.
 	$effect(() => {
 		if (!scene || !basedOn) return;
-		const meta = scene.video_settings?.prompt_draft_meta?.based_on;
-		stale = fromDraft && meta != null && meta !== basedOn;
+		const meta = scene.video_settings?.prompt_draft_meta;
+		stale =
+			fromDraft &&
+			meta != null &&
+			(meta.based_on !== basedOn || meta.workflow_id !== workflow?.id);
 	});
 
 	const draftMeta = $derived(scene?.video_settings?.prompt_draft_meta);
@@ -126,7 +129,11 @@
 		const next = {
 			...existing,
 			prompt_draft: text,
-			prompt_draft_meta: { based_on: basedOn, saved_at: new Date().toISOString() },
+			prompt_draft_meta: {
+				based_on: basedOn,
+				workflow_id: workflow?.id,
+				saved_at: new Date().toISOString(),
+			},
 		};
 		try {
 			await projects.updateScene(projectId, scene.id, { video_settings: next });

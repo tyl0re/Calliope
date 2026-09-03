@@ -202,7 +202,10 @@ def test_preview_prompt_fresh_draft_shortcircuits_llm(client, monkeypatch):
         fresh_scene["character_ids"] = []
         stored = {
             "prompt_draft": "MY SAVED DRAFT",
-            "prompt_draft_meta": {"based_on": _scene_prompt_hash(fresh_scene)},
+            "prompt_draft_meta": {
+                "based_on": _scene_prompt_hash(fresh_scene),
+                "workflow_id": wf_id,
+            },
         }
         conn.execute(
             "UPDATE scenes SET video_settings_json = ? WHERE id = ?",
