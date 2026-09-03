@@ -494,6 +494,21 @@
 				Local uses your FP8/LoRA workflow. API uses the hosted Krea/ComfyUI node and its account limits.
 			</p>
 		</label>
+		<label class="field">
+			<span class="field-label">Local model memory mode</span>
+			<select
+				class="field-select"
+				value={String(fieldValue('model_memory_mode', s.model_memory_mode))}
+				onchange={(e) => (draft.model_memory_mode = e.currentTarget.value)}
+			>
+				<option value="auto">Automatic unload / release</option>
+				<option value="manual">Manual memory management</option>
+			</select>
+			<p class="field-hint">
+				Auto releases ComfyUI memory before local LLM calls. Local LLM unload is attempted when supported.
+				API profiles are not unloaded.
+			</p>
+		</label>
 		<label class="check">
 							<input
 								type="checkbox"

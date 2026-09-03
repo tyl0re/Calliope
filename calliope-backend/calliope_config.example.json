@@ -9,6 +9,7 @@
   "llm_api_key": "",
   "comfyui_base_url": "http://127.0.0.1:8188",
   "comfyui_api_key": "",
+  "model_memory_mode": "auto",
   "krea2_mode": "local",
   "queue_concurrency": 1,
   "queue_poll_interval_sec": 2.0,

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import httpx
 
 from calliope.config import settings
+from calliope.memory import release_comfyui_memory
 
 logger = logging.getLogger("calliope.llm")
 
@@ -112,6 +113,7 @@ class LLMClient:
         temperature: float = 0.7,
         response_format: dict[str, str] | None = None,
     ) -> str:
+        await release_comfyui_memory()
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
@@ -238,6 +240,7 @@ class LLMClient:
         LM-Studio-style fallbacks the blocking path has. A 400 that survives
         both drops surfaces as HTTPStatusError.
         """
+        await release_comfyui_memory()
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,

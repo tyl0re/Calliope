@@ -29,6 +29,7 @@ class SettingsUpdate(BaseModel):
     agent_llm_assignments: dict[str, str | None] | None = None
     comfyui_base_url: str | None = None
     comfyui_api_key: str | None = None
+    model_memory_mode: Literal["auto", "manual"] | None = None
     krea2_mode: Literal["local", "api"] | None = None
     script_min_scene_duration_sec: int | None = None
     script_max_scene_duration_sec: int | None = None

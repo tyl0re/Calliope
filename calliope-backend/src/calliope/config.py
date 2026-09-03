@@ -126,6 +126,7 @@ class Settings(BaseSettings):
 
     comfyui_base_url: str = "http://127.0.0.1:8188"
     comfyui_api_key: str | None = None
+    model_memory_mode: Literal["auto", "manual"] = "auto"
     krea2_mode: Literal["local", "api"] = "local"
     # Comfy is HTTP-only (upload / prompt / history / view). No local input/output dirs.
 
@@ -329,6 +330,7 @@ class Settings(BaseSettings):
             "agent_llm_assignments": dict(self.agent_llm_assignments or {}),
             "comfyui_base_url": self.comfyui_base_url,
             "comfyui_api_key": bool(self.comfyui_api_key),
+            "model_memory_mode": self.model_memory_mode,
             "krea2_mode": self.krea2_mode,
             "queue_concurrency": self.queue_concurrency,
             "queue_poll_interval_sec": self.queue_poll_interval_sec,

@@ -18,6 +18,7 @@ from calliope.comfyui.roles import input_has_role
 from calliope.db import get_db
 from calliope.events.bus import event_bus
 from calliope.export.runner import run_export
+from calliope.memory import prepare_comfyui_memory
 from calliope.queue.manager import queue_manager
 
 logger = logging.getLogger("calliope.worker")
@@ -153,6 +154,7 @@ class QueueWorker:
             workflow = self._load_workflow(workflow_id)
             if not workflow:
                 raise RuntimeError("No workflow found for job")
+            await prepare_comfyui_memory()
             input_values = payload.get("input_values") or {}
             if payload.get("continue_source") and kind == "video":
                 input_values = await self._resolve_continue_source(

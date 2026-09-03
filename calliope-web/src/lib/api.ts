@@ -100,6 +100,7 @@ export interface Settings {
 	llm_active_id: string | null;
 	comfyui_base_url: string;
 	comfyui_api_key: boolean;
+	model_memory_mode: 'auto' | 'manual';
 	krea2_mode: 'local' | 'api';
 	script_min_scene_duration_sec: number;
 	script_max_scene_duration_sec: number;

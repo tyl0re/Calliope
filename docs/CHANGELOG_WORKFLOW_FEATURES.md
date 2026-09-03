@@ -54,6 +54,10 @@ Clicking a Playground artifact opens its recorded prompt and generation settings
 
 Generate-all persists every resolved scene prompt and its workflow identity before queueing the render. This keeps prompt history available after batch generation and prevents a workflow change from silently reusing a stale prompt draft.
 
+## Local Model Memory Mode
+
+Settings expose `Automatic unload / release` and `Manual memory management`. Automatic mode releases ComfyUI models before local LLM calls and attempts to unload local LM Studio models before ComfyUI jobs. OpenAI-compatible API profiles do not trigger unload operations. Control requests are best-effort and time-limited so an unavailable local service does not block the main job indefinitely.
+
 MiniMax-H3 examples use the community INT8 ConvRot uncensored text encoder as a drop-in `CLIPLoader` replacement. Its visual path requires the documented BF16 embedding compatibility patch because matching the diffusion-model quantization alone does not fix the text-encoder limitation. This changes the text-encoder component only; it does not remove all model, provider, or workflow-level safety behavior.
 
 The Playground T2V/I2V examples use the Comfy-Org pruned FP8 FL2VA diffusion model and matching four-step LoRA. Their standard output path is intentionally direct to `VHS_VideoCombine`; optional LTX-2 and RTX post-processing dependencies are not required for the baseline render.
