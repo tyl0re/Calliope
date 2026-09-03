@@ -155,6 +155,25 @@ def _get_workflow(workflow_id: int | None = None) -> dict[str, Any] | None:
         conn.close()
 
 
+def _find_workflow_for_reference_count(
+    conn: sqlite3.Connection, reference_count: int
+) -> dict[str, Any] | None:
+    rows = conn.execute(
+        "SELECT * FROM workflows WHERE kind = 'video' AND is_enabled = 1 ORDER BY id ASC"
+    ).fetchall()
+    candidates = []
+    for row in rows:
+        workflow = row_to_dict(row)
+        image_count = sum(
+            1
+            for item in parse_dynamic_inputs(_workflow_json(workflow))
+            if item.get("role") == "image"
+        )
+        if image_count <= reference_count:
+            candidates.append((image_count, workflow))
+    return max(candidates, key=lambda item: (item[0], -item[1]["id"]))[1] if candidates else None
+
+
 def _scene_video_settings(scene: dict[str, Any]) -> dict[str, Any]:
     """Parsed scenes.video_settings_json — {} when unset or malformed."""
     raw = scene.get("video_settings_json")
@@ -398,10 +417,28 @@ async def enqueue_video_jobs(
                 subjects, ref_paths = _h3_subjects(characters, loc_row, loc_image, inputs)
                 required_refs = sum(1 for item in inputs if item.get("role") == "image")
                 if len(ref_paths) < required_refs:
-                    raise ValueError(
-                        f"{workflow.get('name', 'Video workflow')} requires {required_refs} "
-                        f"image references, but this scene has {len(ref_paths)}."
-                    )
+                    fallback = _find_workflow_for_reference_count(conn, len(ref_paths))
+                    if fallback and fallback["id"] != wf_id:
+                        workflow = fallback
+                        wf_id = workflow["id"]
+                        inputs = parse_dynamic_inputs(_workflow_json(workflow))
+                        profile = workflow.get("prompt_profile") or "prose"
+                        subjects, ref_paths = _h3_subjects(
+                            characters, loc_row, loc_image, inputs
+                        )
+                        conn.execute(
+                            "UPDATE scenes SET workflow_id = ? WHERE id = ?",
+                            (wf_id, scene["id"]),
+                        )
+                        conn.commit()
+                        required_refs = sum(
+                            1 for item in inputs if item.get("role") == "image"
+                        )
+                    if len(ref_paths) < required_refs:
+                        raise ValueError(
+                            f"{workflow.get('name', 'Video workflow')} requires {required_refs} "
+                            f"image references, but this scene has {len(ref_paths)}."
+                        )
                 # Prompt precedence: explicit request → saved (fresh) draft → LLM.
                 explicit_prompt = (prompts or {}).get(scene["id"])
                 fresh_draft = None
