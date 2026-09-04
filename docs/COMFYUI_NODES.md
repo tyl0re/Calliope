@@ -61,6 +61,8 @@ The text-only H3 T2V/Playground example can use the community INT8 ConvRot text 
 
 Reference-to-video and image-to-video examples use the compatible stock H3 INT8 ConvRot encoder because the community encoder's visual path currently requires an unavailable `bfloat16` dequantization backend in ComfyUI. The text-to-video/Playground workflow can use the community encoder. Matching the diffusion-model quantization does not fix this; the text encoder itself would need a new compatible quantized artifact. All H3 text-to-video and image-to-video examples require the Comfy-Org pruned FP8 FL2VA diffusion model `minimax_h3_fl2va_pruned_fp8_scaled.safetensors` in `models/unet/minimax-h3/` and `minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors` in `models/loras/minimax-h3/`. The Playground workflows use a direct `VAE Decode → VHS_VideoCombine` path and do not require the optional LTX/upscaling post-processing branch.
 
+The optional `minimax_h3_fastvideo_t2v_uncensored_API.json` workflow uses the Kijai VSA/DataFree four-step checkpoint, the Uncensored H3 textencoder on CPU, and no realism LoRA to reduce peak VRAM. It is a text-to-video speed path, not a replacement for reference-image workflows.
+
 To enable the community encoder's visual path, apply the narrow compatibility patch after installing ComfyUI:
 
 ```bash

@@ -64,6 +64,8 @@ MiniMax-H3 examples use the community INT8 ConvRot uncensored text encoder as a 
 
 The Playground T2V/I2V examples use the Comfy-Org pruned FP8 FL2VA diffusion model and matching four-step LoRA. Their standard output path is intentionally direct to `VHS_VideoCombine`; optional LTX-2 and RTX post-processing dependencies are not required for the baseline render.
 
+An optional FastVideo four-step T2V workflow is included for faster local iteration. It uses the Kijai VSA/DataFree INT8 checkpoint, keeps the Uncensored H3 textencoder on CPU, and disables the realism LoRA to avoid VRAM spikes. It is intentionally separate from the reference-image workflows because FastVideo is a text-only speed path.
+
 ## Security And Portability
 
 API credentials are kept in ignored local configuration and are exposed through public settings only as boolean presence flags. The ComfyUI API key is passed to API nodes through `extra_data`, never logged or returned. No model weights, generated media, SQLite databases, absolute machine paths, or user-specific configuration are part of this change set.
