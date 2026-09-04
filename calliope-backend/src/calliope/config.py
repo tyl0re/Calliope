@@ -137,7 +137,7 @@ class Settings(BaseSettings):
     # completes or is cancelled. Default 1800s (30 min).
     queue_poll_timeout_sec: float = 1800.0
     queue_max_retries: int = 2
-    agent_max_steps: int = 24
+    agent_max_steps: int = 48
     script_min_scene_duration_sec: int = 4
     script_max_scene_duration_sec: int = 30
     agent_hardening_prompt: str = DEFAULT_AGENT_HARDENING_PROMPT
