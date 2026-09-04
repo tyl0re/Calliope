@@ -135,7 +135,14 @@ async def generate_story(project_id: int, replace: bool = True) -> dict[str, Any
                 "UPDATE scenes SET location_id = NULL WHERE project_id = ?", (project_id,)
             )
 
-        for beat in result.get("beats", []):
+        beat_offset = 0
+        if not replace:
+            beat_offset = conn.execute(
+                "SELECT COALESCE(MAX(order_index), 0) FROM story_beats WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()[0]
+        for index, beat in enumerate(result.get("beats", []), start=1):
+            order_index = int(beat.get("order_index") or index) + beat_offset
             conn.execute(
                 """
                 INSERT INTO story_beats (project_id, order_index, title, description)
@@ -143,7 +150,7 @@ async def generate_story(project_id: int, replace: bool = True) -> dict[str, Any
                 """,
                 {
                     "project_id": project_id,
-                    "order_index": beat.get("order_index", 0),
+                    "order_index": order_index,
                     "title": beat.get("title", ""),
                     "description": beat.get("description", ""),
                 },
